@@ -181,6 +181,36 @@
        SCREEN 3: MAIN APPLICATION PORTAL
        ====================================================================== -->
   <div id="appShell" class="hidden">
+    <!-- DEVELOPER-ONLY IN-APP PERSPECTIVE SWITCHER (Strictly invisible to all non-developer users) -->
+    <div id="devPerspectiveBar" class="hidden no-print" style="background: #1e1b4b; color: #e0e7ff; padding: 0.55rem 1.25rem; border-bottom: 2px solid #818cf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem; font-size: 0.82rem;">
+      <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+        <span style="background:#4f46e5; color:#fff; padding:2px 8px; border-radius:6px; font-weight:800;">🛠️ DEV VIEW-AS</span>
+        <span>दृष्टिकोण चुनें (Preview Role):</span>
+        <select id="devPreviewRole" onchange="onDevPreviewRoleChange()" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;">
+          <option value="DEVELOPER">Developer (पूर्ण नियंत्रण / Default)</option>
+          <option value="DMMU">DMMU सरगुजा (जिला मिशन प्रबंधक)</option>
+          <option value="ZILLA_CEO">CEO जिला पंचायत सरगुजा</option>
+          <option value="BPM">BPM / ब्लॉक समन्वयक (Block Level)</option>
+          <option value="CLF_ADMIN">CLF पदाधिकारी / लेखापाल (Cluster Level)</option>
+          <option value="VO_ADMIN">VO पदाधिकारी (Village Org Level)</option>
+          <option value="CADRE">सामुदायिक कैडर (Field Cadre View)</option>
+          <option value="SPECIFIC_USER">किसी पंजीकृत यूज़र के रूप में देखें...</option>
+        </select>
+
+        <select id="devPreviewCadre" onchange="applyDevPerspective()" class="hidden" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;"></select>
+
+        <select id="devPreviewBlock" onchange="applyDevPerspective()" class="hidden" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;"></select>
+
+        <select id="devPreviewSpecificUser" onchange="applyDevPerspective()" class="hidden" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;">
+          <option value="">-- पंजीकृत यूज़र चुनें --</option>
+        </select>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span id="devPreviewStatusBadge" style="color:#a5b4fc;">Active: Developer Root</span>
+        <button type="button" class="btn btn-sm" style="background:#4f46e5; color:#fff; padding:0.25rem 0.6rem;" onclick="resetDevPerspective()">रीसेट (Developer)</button>
+      </div>
+    </div>
+
     <header class="topbar">
       <div class="brand">
         <div class="brand-badge">बिहान</div>

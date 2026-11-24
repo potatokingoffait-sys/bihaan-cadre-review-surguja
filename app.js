@@ -15,6 +15,8 @@ const STORAGE_KEYS = {
 };
 
 let currentUser = null;
+let realAuthenticatedUser = null;
+let devPreviewState = { active: false, role: "DEVELOPER", cadreType: "RBK", block: "अंबिकापुर (Ambikapur)", targetUserId: "" };
 let allReports = [];
 let allUsers = [];
 let gsheetMasterUrl = "";
@@ -123,7 +125,7 @@ function registerServiceWorker() {
 
 function populateStaticDropdowns() {
   // Blocks
-  const blockSelects = ["regBlock", "filterBlock", "formBlock"];
+  const blockSelects = ["regBlock", "filterBlock", "formBlock", "devPreviewBlock"];
   blockSelects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -136,7 +138,7 @@ function populateStaticDropdowns() {
   });
 
   // Cadres
-  const cadreSelects = ["regCadreSelect", "filterCadre", "formCadreType", "dirCadre"];
+  const cadreSelects = ["regCadreSelect", "filterCadre", "formCadreType", "dirCadre", "devPreviewCadre"];
   cadreSelects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -227,7 +229,10 @@ async function apiRequest(payload) {
     ...payload,
     token,
     deviceFingerprint: fp,
-    deviceLabel: getDeviceLabel()
+    deviceLabel: getDeviceLabel(),
+    previewContext: (realAuthenticatedUser && realAuthenticatedUser.role === "DEVELOPER" && devPreviewState.active)
+      ? devPreviewState
+      : null
   };
 
   const res = await fetch(gasUrl, {
@@ -254,7 +259,9 @@ async function handleLoginSubmit(e) {
     } else {
       localStorage.setItem(STORAGE_KEYS.TOKEN, data.token);
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user));
+      realAuthenticatedUser = data.user;
       currentUser = data.user;
+      devPreviewState = { active: false, role: "DEVELOPER", cadreType: "RBK", block: "अंबिकापुर (Ambikapur)", targetUserId: "" };
       enterPortal();
     }
   } catch (err) {
@@ -303,8 +310,11 @@ async function verifySessionAndEnter() {
     }
     const data = await apiRequest({ action: "verifySession" });
     if (data.ok) {
-      currentUser = data.user;
-      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(currentUser));
+      realAuthenticatedUser = data.user;
+      if (!devPreviewState.active) {
+        currentUser = data.user;
+      }
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user));
       enterPortal();
     } else {
       // New device detected or session expired -> force fresh Sign In
@@ -468,9 +478,13 @@ function showAuthScreen() {
 // MAIN PORTAL INITIALIZATION & ROLE-BASED ACCESS ENFORCEMENT
 // ==========================================================================
 async function enterPortal() {
+  if (!realAuthenticatedUser) realAuthenticatedUser = currentUser;
   document.getElementById("authScreen").classList.add("hidden");
   document.getElementById("unlockScreen").classList.add("hidden");
   document.getElementById("appShell").classList.remove("hidden");
+
+  const isRealDev = realAuthenticatedUser && realAuthenticatedUser.role === "DEVELOPER";
+  document.getElementById("devPerspectiveBar").classList.toggle("hidden", !isRealDev);
 
   const isAbsAdmin = !!currentUser.isAbsoluteAdmin; // DMMU, ZILLA_CEO, DEVELOPER
   document.getElementById("headerUserSubtitle").textContent =
@@ -491,9 +505,13 @@ async function enterPortal() {
     document.getElementById("analyticsChartsSection").classList.add("hidden");
     document.getElementById("accessScopeNote").textContent = "सीमित पहुँच: केवल आपके स्वयं के प्रतिवेदन प्रदर्शित हैं।";
   } else if (!isAbsAdmin) {
+    document.getElementById("filterBlockWrap").classList.toggle("hidden", currentUser.role === "BPM" || currentUser.role === "CLF_ADMIN" || currentUser.role === "VO_ADMIN");
+    document.getElementById("filterCadreWrap").classList.remove("hidden");
     document.getElementById("analyticsChartsSection").classList.remove("hidden");
     document.getElementById("accessScopeNote").textContent = `सीमित कार्यक्षेत्र पहुँच (${currentUser.block} / ${currentUser.clf})`;
   } else {
+    document.getElementById("filterBlockWrap").classList.remove("hidden");
+    document.getElementById("filterCadreWrap").classList.remove("hidden");
     document.getElementById("analyticsChartsSection").classList.remove("hidden");
     document.getElementById("accessScopeNote").textContent = "पूर्ण जिला पहुँच (DMMU / Zilla CEO / Developer — संशोधन व डिलीट अधिकार सक्रिय)";
   }
@@ -959,6 +977,22 @@ async function deleteReport(reportId) {
 }
 
 function renderUsersTable() {
+  if (realAuthenticatedUser && realAuthenticatedUser.role === "DEVELOPER") {
+    const specSel = document.getElementById("devPreviewSpecificUser");
+    if (specSel) {
+      const prevVal = specSel.value;
+      specSel.innerHTML = '<option value="">-- पंजीकृत यूज़र चुनें --</option>';
+      allUsers.forEach(u => {
+        if (u.role === "DEVELOPER") return;
+        const opt = document.createElement("option");
+        opt.value = u.userId;
+        opt.textContent = `${u.fullName} (${u.role}${u.cadreType !== "NONE" ? " - " + u.cadreType : ""} | ${u.block})`;
+        specSel.appendChild(opt);
+      });
+      if (prevVal) specSel.value = prevVal;
+    }
+  }
+
   const tbody = document.getElementById("usersTableBody");
   if (!tbody) return;
   tbody.innerHTML = "";
@@ -1087,4 +1121,86 @@ function showAlert(id, msg, type) {
 function hideAlert(id) {
   const el = document.getElementById(id);
   if (el) el.classList.add("hidden");
+}
+
+// ==========================================================================
+// DEVELOPER IN-APP MULTI-ROLE PERSPECTIVE SWITCHER ("VIEW AS")
+// ==========================================================================
+function onDevPreviewRoleChange() {
+  const role = document.getElementById("devPreviewRole").value;
+  document.getElementById("devPreviewCadre").classList.toggle("hidden", role !== "CADRE");
+  document.getElementById("devPreviewBlock").classList.toggle("hidden", !["BPM", "CLF_ADMIN", "VO_ADMIN", "CADRE"].includes(role));
+  document.getElementById("devPreviewSpecificUser").classList.toggle("hidden", role !== "SPECIFIC_USER");
+  applyDevPerspective();
+}
+
+async function applyDevPerspective() {
+  if (!realAuthenticatedUser || realAuthenticatedUser.role !== "DEVELOPER") return;
+  const roleChoice = document.getElementById("devPreviewRole").value;
+
+  if (roleChoice === "DEVELOPER") {
+    await resetDevPerspective();
+    return;
+  }
+
+  if (roleChoice === "SPECIFIC_USER") {
+    const targetUserId = document.getElementById("devPreviewSpecificUser").value;
+    if (!targetUserId) return;
+    const found = allUsers.find(u => u.userId === targetUserId);
+    if (!found) return;
+    devPreviewState = {
+      active: true,
+      role: found.role,
+      cadreType: found.cadreType,
+      block: found.block,
+      targetUserId: found.userId
+    };
+    currentUser = { ...found, isPreviewMode: true };
+    document.getElementById("devPreviewStatusBadge").textContent = `Viewing As: ${found.fullName} (${found.role})`;
+  } else {
+    const cadreType = document.getElementById("devPreviewCadre").value || "RBK";
+    const block = document.getElementById("devPreviewBlock").value || "अंबिकापुर (Ambikapur)";
+    const isAbs = ["DMMU", "ZILLA_CEO"].includes(roleChoice);
+
+    devPreviewState = {
+      active: true,
+      role: roleChoice,
+      cadreType,
+      block,
+      targetUserId: ""
+    };
+
+    currentUser = {
+      userId: "PREVIEW_" + roleChoice,
+      fullName: `[Preview] ${roleChoice}${roleChoice === "CADRE" ? " - " + cadreType : ""}`,
+      category: ["DMMU", "ZILLA_CEO", "BPM"].includes(roleChoice) ? "DEPARTMENT" : "CADRE_OTHERS",
+      role: roleChoice,
+      cadreType: roleChoice === "CADRE" ? cadreType : "NONE",
+      block: isAbs ? "ALL" : block,
+      clf: isAbs || roleChoice === "BPM" ? "ALL" : "Demo CLF (" + block.split(" ")[0] + ")",
+      vo: ["VO_ADMIN", "CADRE"].includes(roleChoice) ? "Demo VO" : "ALL",
+      mobile: "9999999999",
+      status: "ACTIVE",
+      isAbsoluteAdmin: isAbs,
+      isPreviewMode: true
+    };
+    document.getElementById("devPreviewStatusBadge").textContent =
+      `Viewing As: ${roleChoice}${roleChoice === "CADRE" ? " (" + cadreType + ")" : ""} • ${isAbs ? "Full District" : block}`;
+  }
+
+  switchMainTab("tabDashboard", document.querySelector("[data-tab=tabDashboard]"));
+  await enterPortal();
+}
+
+async function resetDevPerspective() {
+  if (!realAuthenticatedUser) return;
+  devPreviewState = { active: false, role: "DEVELOPER", cadreType: "RBK", block: "अंबिकापुर (Ambikapur)", targetUserId: "" };
+  document.getElementById("devPreviewRole").value = "DEVELOPER";
+  document.getElementById("devPreviewCadre").classList.add("hidden");
+  document.getElementById("devPreviewBlock").classList.add("hidden");
+  document.getElementById("devPreviewSpecificUser").classList.add("hidden");
+  document.getElementById("devPreviewStatusBadge").textContent = "Active: Developer Root";
+  currentUser = realAuthenticatedUser;
+  switchMainTab("tabDashboard", document.querySelector("[data-tab=tabDashboard]"));
+  await enterPortal();
 }
