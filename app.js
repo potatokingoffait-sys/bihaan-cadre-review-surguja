@@ -240,7 +240,12 @@ async function apiRequest(payload) {
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify(fullPayload)
   });
-  return await res.json();
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (parseErr) {
+    throw new Error("Apps Script ने वैध JSON नहीं भेजा। सुनिश्चित करें कि 'Who has access: Anyone' पर Deploy किया गया है।");
+  }
 }
 
 async function handleLoginSubmit(e) {
@@ -667,7 +672,11 @@ function renderReportsTable(list) {
 function renderCharts(list) {
   if (typeof Chart === "undefined") return;
 
-  // Chart 1: Block-wise Report Count & Avg Score
+  const styles = getComputedStyle(document.documentElement);
+  const textColor = (styles.getPropertyValue("--text") || "#eef5f1").trim();
+  const mutedColor = (styles.getPropertyValue("--text-muted") || "#9eb5a8").trim();
+  const borderColor = (styles.getPropertyValue("--border") || "#283e33").trim();
+
   const blockLabels = SURGUJA_BLOCKS.map(b => b.split(" ")[0]);
   const blockCounts = SURGUJA_BLOCKS.map(b => list.filter(r => r.block === b).length);
   const blockAvgScores = SURGUJA_BLOCKS.map(b => {
@@ -675,36 +684,56 @@ function renderCharts(list) {
     return sub.length ? Math.round(sub.reduce((s, r) => s + Number(r.totalScore || 0), 0) / sub.length) : 0;
   });
 
+  const hasAnyBlockData = blockCounts.some(v => v > 0) || blockAvgScores.some(v => v > 0);
+
   if (blockChartInstance) blockChartInstance.destroy();
   blockChartInstance = new Chart(document.getElementById("blockChart"), {
     type: "bar",
     data: {
       labels: blockLabels,
       datasets: [
-        { label: "जमा प्रतिवेदन संख्या", data: blockCounts, backgroundColor: "#15803d" },
-        { label: "औसत प्राप्तांक (/100)", data: blockAvgScores, backgroundColor: "#d97706" }
+        { label: "जमा प्रतिवेदन संख्या", data: hasAnyBlockData ? blockCounts : [0,0,0,0,0,0,0,0], backgroundColor: "#22c55e" },
+        { label: "औसत प्राप्तांक (/100)", data: hasAnyBlockData ? blockAvgScores : [0,0,0,0,0,0,0,0], backgroundColor: "#f59e0b" }
       ]
     },
-    options: { responsive: true, maintainAspectRatio: false }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: textColor } }
+      },
+      scales: {
+        x: { ticks: { color: textColor }, grid: { color: borderColor } },
+        y: { beginAtZero: true, suggestedMax: 10, ticks: { color: mutedColor }, grid: { color: borderColor } }
+      }
+    }
   });
 
-  // Chart 2: Grade Distribution Doughnut
   const gA = list.filter(r => r.grade === "A").length;
   const gB = list.filter(r => r.grade === "B").length;
   const gC = list.filter(r => r.grade === "C").length;
   const gD = list.filter(r => r.grade === "D").length;
+  const totalGrades = gA + gB + gC + gD;
 
   if (gradeChartInstance) gradeChartInstance.destroy();
   gradeChartInstance = new Chart(document.getElementById("gradeChart"), {
     type: "doughnut",
     data: {
-      labels: ["ग्रेड A (80-100)", "ग्रेड B (60-79)", "ग्रेड C (40-59)", "ग्रेड D (<40)"],
+      labels: totalGrades > 0
+        ? ["ग्रेड A (80-100)", "ग्रेड B (60-79)", "ग्रेड C (40-59)", "ग्रेड D (<40)"]
+        : ["कोई ग्रेड डेटा नहीं (No Data Yet)"],
       datasets: [{
-        data: [gA, gB, gC, gD],
-        backgroundColor: ["#16a34a", "#2563eb", "#f59e0b", "#dc2626"]
+        data: totalGrades > 0 ? [gA, gB, gC, gD] : [1],
+        backgroundColor: totalGrades > 0 ? ["#16a34a", "#2563eb", "#f59e0b", "#dc2626"] : ["#334155"]
       }]
     },
-    options: { responsive: true, maintainAspectRatio: false }
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: textColor } }
+      }
+    }
   });
 }
 
