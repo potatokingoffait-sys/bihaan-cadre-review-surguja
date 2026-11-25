@@ -214,7 +214,11 @@ function saveGasUrl() {
 async function apiRequest(payload) {
   const gasUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL);
   if (!gasUrl) {
-    throw new Error("Google Apps Script Web App URL सेट नहीं है। कृपया Settings में URL दर्ज करें या Deploy करें।");
+    const box = document.getElementById("loginGasSetupBox");
+    const inp = document.getElementById("loginGasUrlInput");
+    if (box) box.classList.remove("hidden");
+    if (inp && !inp.value) inp.value = localStorage.getItem(STORAGE_KEYS.GAS_URL) || "";
+    throw new Error("Backend URL not configured yet. Paste your Google Apps Script /exec URL below and click Save Backend URL.");
   }
   const fp = await getDeviceFingerprint();
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN) || "";
@@ -597,7 +601,7 @@ async function syncData() {
       loadAuditLogs();
     }
   } catch (err) {
-    showAlert("globalAlert", "ऑफ़लाइन मोड या सिंक त्रुटि: " + err.message, "danger");
+    showAlert("globalAlert", "Sync notice: " + err.message, "danger");
   }
 }
 
@@ -1414,4 +1418,26 @@ function clearAllFilters() {
   document.getElementById("filterBlock").value = "ALL";
   document.getElementById("filterCadre").value = "ALL";
   renderDashboard();
+}
+
+function toggleLoginGasBox() {
+  const box = document.getElementById("loginGasSetupBox");
+  if (!box) return;
+  box.classList.toggle("hidden");
+  const inp = document.getElementById("loginGasUrlInput");
+  if (inp && !inp.value) {
+    inp.value = localStorage.getItem(STORAGE_KEYS.GAS_URL) || "";
+  }
+}
+
+function saveGasUrlFromLogin() {
+  const inp = document.getElementById("loginGasUrlInput");
+  if (!inp) return;
+  const val = inp.value.trim();
+  if (!val) {
+    showAlert("authAlert", "Please enter a valid Google Apps Script /exec URL.", "danger");
+    return;
+  }
+  localStorage.setItem(STORAGE_KEYS.GAS_URL, val);
+  showAlert("authAlert", "Backend URL saved. Click Sign In now.", "success");
 }

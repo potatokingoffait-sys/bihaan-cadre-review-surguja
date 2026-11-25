@@ -1,15 +1,11 @@
-// CGSRLM Bihaan Surguja v7 - Immediate-update service worker
-self.addEventListener("install", event => {
-  self.skipWaiting();
-});
-
+// CGSRLM Bihaan Surguja v9 - Always fetch fresh HTML/JS/CSS
+self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
-
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   event.respondWith(fetch(event.request));

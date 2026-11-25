@@ -55,8 +55,14 @@
         </div>
         <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn" data-i18n="signInBtn">Sign In</button>
 
-        <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--border); text-align: center; font-size: 0.78rem; color: var(--text-muted);">
+        <div id="loginGasSetupBox" class="hidden" style="margin-top: 0.85rem; padding: 0.75rem; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border);">
+          <label for="loginGasUrlInput" style="font-size: 0.78rem;">Google Apps Script Web App URL (/exec)</label>
+          <input id="loginGasUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" style="margin-bottom: 0.45rem;" />
+          <button type="button" class="btn btn-outline btn-sm btn-block" onclick="saveGasUrlFromLogin()">Save Backend URL</button>
+        </div>
+        <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.76rem; color: var(--text-muted);">
           <span data-i18n="loginHint">Password required on new devices • Quick unlock with PIN or fingerprint after first sign-in</span>
+          <button type="button" class="btn btn-outline btn-sm" onclick="toggleLoginGasBox()">Backend URL</button>
         </div>
       </form>
 
