@@ -1329,7 +1329,8 @@ async function saveDistrictDirective(e) {
   }
 }
 
-async 
+async function loadAuditLogs() {
+
 let allDeletedRecords = [];
 
 async function loadDeletedRecords() {
@@ -1367,7 +1368,6 @@ function renderDeletedRecords() {
   });
 }
 
-function loadAuditLogs() {
   try {
     const res = await apiRequest({ action: "getAuditLogs" });
     if (!res.ok) return;
