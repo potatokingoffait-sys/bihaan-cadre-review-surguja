@@ -894,7 +894,7 @@ function buildDynamicKpiForm(existingData = null) {
                value="${escHtml(marksVal)}" ${canScore ? "" : "readonly title='Scores are entered at VO/CLF/DMMU review'"}
                oninput="recalculateTotals()" style="width:65px; padding:4px;" />
            </div>`
-        : `<input type="text" class="kpi-marks" value="${escHtml(marksVal)}" placeholder="${escHtml(statusPlaceholder)}" style="padding:4px;" />`;
+        : `<input type="text" class="kpi-marks" value="${escHtml(marksVal)}" placeholder="${escHtml(statusPlaceholder)}" oninput="this.dataset.userEdited='1'" style="padding:4px;" />`;
 
       const photoPreviewHtml = savedPhoto
         ? `<div class="kpi-photo-preview" style="margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -1066,32 +1066,108 @@ function extractNum_(val) {
   return m ? parseFloat(m[0]) : NaN;
 }
 
+function cadenceToMonthlyUnits_(text) {
+  const s = String(text || "").toLowerCase().trim();
+  if (!s) return NaN;
+  if (/दैनिक|प्रतिदिन|daily|everyday/.test(s)) return 30;
+  if (/साप्ताहिक|weekly|हर सप्ताह|हर हफ्ते/.test(s)) return 4;
+  if (/पाक्षिक|fortnightly|15 दिन/.test(s)) return 2;
+  if (/मासिक|monthly|हर माह|प्रति माह/.test(s)) return 1;
+  if (/तिमाही|quarterly|3 माह/.test(s)) return 1 / 3;
+  if (/छमाही|half.?yearly|6 माह/.test(s)) return 1 / 6;
+  if (/वार्षिक|annual|yearly|सालाना/.test(s)) return 1 / 12;
+  return NaN;
+}
+
+function interpretKpiLocalAI_(kpiText, tRaw, aRaw) {
+  const tStr = String(tRaw || "").trim();
+  const aStr = String(aRaw || "").trim();
+  if (!aStr) return { pct: "", ratio: NaN, statusLabel: "" };
+
+  const aLower = aStr.toLowerCase();
+  const tLower = tStr.toLowerCase();
+
+  // 1. Explicit completion / affirmative words
+  if (/^(completed|complete|done|yes|पूर्ण|संपन्न|हो गया|हाँ|ok|okay)$/i.test(aLower)) {
+    return { pct: "100%", ratio: 1, statusLabel: currentLang === "en" ? "Completed" : "पूर्ण" };
+  }
+
+  // 2. Frequency / cadence comparison (e.g., "मासिक" vs "साप्ताहिक")
+  const tCad = cadenceToMonthlyUnits_(tStr);
+  const aCad = cadenceToMonthlyUnits_(aStr);
+  if (!isNaN(tCad) && !isNaN(aCad) && tCad > 0) {
+    const effRatio = Math.min(1, aCad / tCad);
+    return {
+      pct: Math.round(effRatio * 100) + "%",
+      ratio: effRatio,
+      statusLabel: aCad >= tCad ? (currentLang === "en" ? "On Track" : "नियमित / पूर्ण") : (currentLang === "en" ? "Partial" : "आंशिक")
+    };
+  }
+
+  // 3. Deadline / "by Xth" date targets (e.g., "10 तारीख तक" with achieved "9 TH" or "9")
+  const isDeadlineTarget = /तारीख|दिनांक|तक|by|before|deadline|date/i.test(tStr) || /तारीख|दिनांक|तक/i.test(kpiText || "");
+  const tNum = extractNum_(tStr);
+  const aNum = extractNum_(aStr);
+
+  if (isDeadlineTarget && !isNaN(tNum) && tNum > 0 && !isNaN(aNum) && aNum > 0) {
+    if (aNum <= tNum) {
+      return {
+        pct: "100%",
+        ratio: 1,
+        statusLabel: currentLang === "en" ? "On Time" : "समय पर पूर्ण"
+      };
+    } else {
+      const delayedRatio = Math.max(0.1, Math.min(1, tNum / aNum));
+      return {
+        pct: Math.round(delayedRatio * 100) + "%",
+        ratio: delayedRatio,
+        statusLabel: currentLang === "en" ? "Delayed" : "विलंबित"
+      };
+    }
+  }
+
+  // 4. Standard numeric target vs achievement
+  if (!isNaN(tNum) && tNum > 0 && !isNaN(aNum)) {
+    const rawPct = Math.round((aNum / tNum) * 100);
+    const ratio = Math.min(1, Math.max(0, aNum / tNum));
+    return {
+      pct: rawPct + "%",
+      ratio: ratio,
+      statusLabel: ratio >= 1 ? (currentLang === "en" ? "Completed" : "पूर्ण") : ""
+    };
+  }
+
+  // 5. Exact match with target text
+  if (tLower && aLower === tLower) {
+    return { pct: "100%", ratio: 1, statusLabel: currentLang === "en" ? "Completed" : "पूर्ण" };
+  }
+
+  return { pct: "", ratio: NaN, statusLabel: "" };
+}
+
 function calcRowPct(inputEl) {
   const tr = inputEl.closest("tr");
+  const kpiText = (tr.children[1] && tr.children[1].textContent) || "";
   const tRaw = tr.querySelector(".kpi-target").value.trim();
   const aRaw = tr.querySelector(".kpi-achieved").value.trim();
-  const t = extractNum_(tRaw);
-  const a = extractNum_(aRaw);
   const pctInput = tr.querySelector(".kpi-pct");
   const marksInput = tr.querySelector(".kpi-marks");
   const maxMarks = parseFloat(tr.dataset.maxMarks || 0);
 
-  if (!isNaN(t) && t > 0 && !isNaN(a)) {
-    const rawPct = Math.round((a / t) * 100);
-    pctInput.value = rawPct + "%";
-    const ratio = Math.min(1, Math.max(0, a / t));
-    if (marksInput && marksInput.type === "number" && maxMarks > 0) {
-      marksInput.value = Number((ratio * maxMarks).toFixed(1));
-      recalculateTotals();
-    }
-  } else if (aRaw && ["completed", "complete", "done", "yes", "पूर्ण", "हाँ", "मासिक", "वार्षिक"].includes(aRaw.toLowerCase()) || (tRaw && aRaw && tRaw.toLowerCase() === aRaw.toLowerCase())) {
-    pctInput.value = "100%";
-  } else {
-    pctInput.value = "";
-    if (marksInput && marksInput.type === "number" && maxMarks > 0) {
+  const ai = interpretKpiLocalAI_(kpiText, tRaw, aRaw);
+  pctInput.value = ai.pct;
+
+  if (marksInput && marksInput.type === "text" && ai.statusLabel && !marksInput.dataset.userEdited) {
+    marksInput.value = ai.statusLabel;
+  }
+
+  if (marksInput && marksInput.type === "number" && maxMarks > 0) {
+    if (!isNaN(ai.ratio)) {
+      marksInput.value = Number((ai.ratio * maxMarks).toFixed(1));
+    } else {
       marksInput.value = "";
-      recalculateTotals();
     }
+    recalculateTotals();
   }
 }
 
