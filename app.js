@@ -87,6 +87,7 @@ window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () 
 // Initialization on Page Load
 window.addEventListener("DOMContentLoaded", async () => {
   applyTheme(localStorage.getItem(STORAGE_KEYS.THEME) || "system");
+  applyLanguageUI();
   registerServiceWorker();
   populateStaticDropdowns();
 
@@ -485,7 +486,7 @@ function showAuthScreen() {
 // ==========================================================================
 // MAIN PORTAL INITIALIZATION & ROLE-BASED ACCESS ENFORCEMENT
 // ==========================================================================
-async function enterPortal() {
+async function enterPortal(skipSync = false) {
   if (!realAuthenticatedUser) realAuthenticatedUser = currentUser;
   document.getElementById("authScreen").classList.add("hidden");
   document.getElementById("unlockScreen").classList.add("hidden");
@@ -506,22 +507,37 @@ async function enterPortal() {
   document.getElementById("adminSystemSettingsCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("auditLogCard").classList.toggle("hidden", !isAbsAdmin);
 
-  // Restrict filters for lower roles according to their jurisdiction
-  if (currentUser.role === "CADRE") {
+  const t = I18N[currentLang] || I18N.en;
+  const isCadreUser = currentUser.role === "CADRE";
+
+  // Cadres see Dashboard & Grade only (no marks, no honorarium, no approval dropdown, no reviewer remarks)
+  document.getElementById("totalScoreFieldWrap").classList.toggle("hidden", isCadreUser);
+  document.getElementById("honorariumFieldWrap").classList.toggle("hidden", isCadreUser);
+  document.getElementById("approvalActionWrap").classList.toggle("hidden", isCadreUser);
+  document.getElementById("reviewerRemarksWrap").classList.toggle("hidden", isCadreUser);
+  document.getElementById("gradeFieldWrap").classList.remove("hidden");
+
+  // Honorarium KPI card is only for District & above / reviewers, not Cadres
+  const honStatBox = document.getElementById("statHonorarium") ? document.getElementById("statHonorarium").closest(".stat-box") : null;
+  const avgStatBox = document.getElementById("statAvgScore") ? document.getElementById("statAvgScore").closest(".stat-box") : null;
+  if (honStatBox) honStatBox.classList.toggle("hidden", isCadreUser);
+  if (avgStatBox) avgStatBox.classList.toggle("hidden", isCadreUser);
+
+  if (isCadreUser) {
     document.getElementById("filterBlockWrap").classList.add("hidden");
     document.getElementById("filterCadreWrap").classList.add("hidden");
     document.getElementById("analyticsChartsSection").classList.add("hidden");
-    document.getElementById("accessScopeNote").textContent = "सीमित पहुँच: केवल आपके स्वयं के प्रतिवेदन प्रदर्शित हैं।";
+    document.getElementById("accessScopeNote").textContent = t.cadreScopeNote;
   } else if (!isAbsAdmin) {
     document.getElementById("filterBlockWrap").classList.toggle("hidden", currentUser.role === "BPM" || currentUser.role === "CLF_ADMIN" || currentUser.role === "VO_ADMIN");
     document.getElementById("filterCadreWrap").classList.remove("hidden");
     document.getElementById("analyticsChartsSection").classList.remove("hidden");
-    document.getElementById("accessScopeNote").textContent = `सीमित कार्यक्षेत्र पहुँच (${currentUser.block} / ${currentUser.clf})`;
+    document.getElementById("accessScopeNote").textContent = `${t.otherScopeNote} (${currentUser.block} / ${currentUser.clf})`;
   } else {
     document.getElementById("filterBlockWrap").classList.remove("hidden");
     document.getElementById("filterCadreWrap").classList.remove("hidden");
     document.getElementById("analyticsChartsSection").classList.remove("hidden");
-    document.getElementById("accessScopeNote").textContent = "पूर्ण जिला पहुँच (DMMU / Zilla CEO / Developer — संशोधन व डिलीट अधिकार सक्रिय)";
+    document.getElementById("accessScopeNote").textContent = t.adminScopeNote;
   }
 
   // Populate Settings Account Info
@@ -537,7 +553,8 @@ async function enterPortal() {
   }
 
   resetReportForm();
-  await syncData();
+  if (!skipSync) await syncData();
+  else renderDashboard();
 }
 
 function switchMainTab(tabId, btnEl) {
@@ -665,14 +682,15 @@ function renderReportsTable(list) {
       actionBtns += ` <button type="button" class="btn btn-danger btn-sm" onclick="deleteReport('${escHtml(r.reportId)}')">डिलीट</button>`;
     }
 
+    const isCadreView = currentUser.role === "CADRE";
     tr.innerHTML = `
       <td><strong>${escHtml(r.monthYear)}</strong></td>
       <td>${escHtml(r.cadreType)}</td>
       <td>${escHtml(r.cadreName)}<br><small style="color:var(--text-muted)">${escHtml(r.mobile)}</small></td>
       <td>${escHtml(r.block)}<br><small style="color:var(--text-muted)">CLF: ${escHtml(r.clf)}${r.vo ? " | VO: " + escHtml(r.vo) : ""}</small></td>
-      <td><strong>${r.cadreType === "PRP" ? "SOP आधारित" : escHtml(r.totalScore) + "/100"}</strong></td>
+      <td><strong>${isCadreView ? "—" : (r.cadreType === "PRP" ? "SOP" : escHtml(r.totalScore) + "/100")}</strong></td>
       <td><span class="badge badge-${escHtml(r.grade || 'B')}">${escHtml(r.grade || "-")}</span></td>
-      <td>₹${Number(r.honorarium || 0).toLocaleString("en-IN")}</td>
+      <td>${isCadreView ? "—" : "₹" + Number(r.honorarium || 0).toLocaleString("en-IN")}</td>
       <td>${escHtml(statusText)}</td>
       <td class="no-print" style="white-space:nowrap;">${actionBtns}</td>
     `;
@@ -791,7 +809,10 @@ function buildDynamicKpiForm(existingData = null) {
 
   document.getElementById("formHeaderTitle").textContent = schema.titleHi;
   document.getElementById("formHierarchyNote").textContent = `समीक्षा प्रवाह: ${schema.hierarchy} (${schema.titleEn})`;
-  document.getElementById("kpiMarksColHeader").textContent = schema.hasScoring ? "अधिकतम / प्राप्त अंक" : "स्थिति / रिमार्क";
+  const isCadreFormView = currentUser && currentUser.role === "CADRE";
+  const marksTh = document.getElementById("kpiMarksColHeader");
+  marksTh.classList.toggle("hidden", isCadreFormView);
+  marksTh.textContent = schema.hasScoring ? "Marks (/Max)" : "Status";
 
   const tbody = document.getElementById("dynamicKpiBody");
   tbody.innerHTML = "";
@@ -800,7 +821,7 @@ function buildDynamicKpiForm(existingData = null) {
 
   schema.sections.forEach(sec => {
     const secRow = document.createElement("tr");
-    secRow.innerHTML = `<td colspan="7" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(sec.name)}${sec.maxMarks ? ` — [कुल ${sec.maxMarks} अंक]` : ""}</td>`;
+    secRow.innerHTML = `<td colspan="${isCadreFormView ? 6 : 7}" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(sec.name)}${sec.maxMarks ? ` — [कुल ${sec.maxMarks} अंक]` : ""}</td>`;
     tbody.appendChild(secRow);
 
     sec.kpis.forEach(kpi => {
@@ -829,7 +850,7 @@ function buildDynamicKpiForm(existingData = null) {
         <td><input type="text" class="kpi-target" value="${escHtml(targetVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
         <td><input type="text" class="kpi-achieved" value="${escHtml(achievedVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
         <td><input type="text" class="kpi-pct" readonly value="${escHtml(pctVal)}" style="padding:4px; background:var(--surface-2);" /></td>
-        <td>${marksCell}</td>
+        <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
         <td><small style="color:var(--text-muted);">${escHtml(kpi.evidence)}</small></td>
       `;
       tbody.appendChild(tr);
@@ -1243,4 +1264,95 @@ async function resetDevPerspective() {
   currentUser = realAuthenticatedUser;
   switchMainTab("tabDashboard", document.querySelector("[data-tab=tabDashboard]"));
   await enterPortal();
+}
+
+let currentLang = localStorage.getItem("bihaan_surguja_lang") || "en";
+
+const I18N = {
+  en: {
+    brandTitle: "CGSRLM Bihan — District Surguja",
+    brandSub: "Monthly Cadre Review & Monitoring Portal",
+    sync: "🔄 Sync",
+    lock: "🔒 Lock",
+    navDashboard: "📊 Dashboard",
+    navEntry: "📝 Monthly Report",
+    navAdmin: "🛡️ Admin & Users",
+    navSettings: "⚙️ Settings",
+    clearFilter: "✕ Remove Filter",
+    printPdf: "🖨️ Print / PDF",
+    saveBtn: "💾 Save",
+    statTotal: "Total Reports",
+    statAvg: "Avg Score (/100)",
+    statGradeA: "Grade-A Cadres",
+    statGradeCD: "Grade-C/D Cadres",
+    statHon: "Recommended Honorarium (₹)",
+    cadreScopeNote: "Cadre View: Grade only (marks & honorarium hidden). Dashboard & your report entries shown.",
+    otherScopeNote: "Jurisdiction View: Scoped data & review access.",
+    adminScopeNote: "District & Above Full Access: Marks, Grades, Analytics, Edit/Delete & Google Sheet."
+  },
+  hi: {
+    brandTitle: "CGSRLM बिहान — जिला सरगुजा",
+    brandSub: "मासिक कैडर समीक्षा एवं अनुश्रवण पोर्टल",
+    sync: "🔄 सिंक",
+    lock: "🔒 लॉक",
+    navDashboard: "📊 डैशबोर्ड",
+    navEntry: "📝 मासिक प्रतिवेदन",
+    navAdmin: "🛡️ एडमिन व यूज़र",
+    navSettings: "⚙️ सेटिंग्स",
+    clearFilter: "✕ फ़िल्टर हटाएं",
+    printPdf: "🖨️ प्रिंट / PDF",
+    saveBtn: "💾 Save",
+    statTotal: "कुल प्रतिवेदन",
+    statAvg: "औसत प्राप्तांक (/100)",
+    statGradeA: "ग्रेड-A कैडर",
+    statGradeCD: "ग्रेड-C/D कैडर",
+    statHon: "अनुशंसित मानदेय (₹)",
+    cadreScopeNote: "कैडर दृश्य: केवल ग्रेड दिखता है (अंक व मानदेय छिपे हैं)। डैशबोर्ड व आपके भरने योग्य डेटा उपलब्ध हैं।",
+    otherScopeNote: "कार्यक्षेत्र दृश्य: सीमित डेटा एवं समीक्षा पहुँच।",
+    adminScopeNote: "जिला एवं उच्च स्तर: अंक, ग्रेड, डैशबोर्ड, संशोधन/डिलीट व Google Sheet पहुँच।"
+  }
+};
+
+function toggleLanguage() {
+  currentLang = currentLang === "en" ? "hi" : "en";
+  localStorage.setItem("bihaan_surguja_lang", currentLang);
+  applyLanguageUI();
+}
+
+function applyLanguageUI() {
+  const t = I18N[currentLang] || I18N.en;
+  const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setTxt("authBrandTitle", t.brandTitle);
+  setTxt("authBrandSub", t.brandSub);
+  setTxt("syncBtn", t.sync);
+  setTxt("lockBtn", t.lock);
+  setTxt("clearFilterBtn", t.clearFilter);
+  setTxt("printPdfBtn", t.printPdf);
+
+  const navBtns = document.querySelectorAll("#mainNavTabs .nav-btn");
+  if (navBtns[0]) navBtns[0].textContent = t.navDashboard;
+  if (navBtns[1]) navBtns[1].textContent = t.navEntry;
+  if (navBtns[2]) navBtns[2].textContent = t.navAdmin;
+  if (navBtns[3]) navBtns[3].textContent = t.navSettings;
+
+  const statLabels = document.querySelectorAll("#tabDashboard .stat-label");
+  if (statLabels[0]) statLabels[0].textContent = t.statTotal;
+  if (statLabels[1]) statLabels[1].textContent = t.statAvg;
+  if (statLabels[2]) statLabels[2].textContent = t.statGradeA;
+  if (statLabels[3]) statLabels[3].textContent = t.statGradeCD;
+  if (statLabels[4]) statLabels[4].textContent = t.statHon;
+
+  const saveSubmit = document.querySelector("#monthlyReportForm button[type='submit']");
+  if (saveSubmit) saveSubmit.textContent = t.saveBtn;
+
+  if (currentUser) {
+    enterPortal(true);
+  }
+}
+
+function clearAllFilters() {
+  document.getElementById("filterMonth").value = "ALL";
+  document.getElementById("filterBlock").value = "ALL";
+  document.getElementById("filterCadre").value = "ALL";
+  renderDashboard();
 }

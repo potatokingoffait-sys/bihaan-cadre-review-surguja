@@ -1,4 +1,4 @@
-const CACHE_NAME = "bihaan-surguja-v4";
+const CACHE_NAME = "bihaan-surguja-v5";
 const ASSETS = [
   "./",
   "./index.html",
