@@ -1,0 +1,22 @@
+{
+  "name": "CGSRLM बिहान सरगुजा — कैडर समीक्षा एवं अनुश्रवण पोर्टल",
+  "short_name": "बिहान सरगुजा",
+  "description": "छत्तीसगढ़ राज्य ग्रामीण आजीविका मिशन (बिहान) जिला सरगुजा मासिक कैडर अनुश्रवण एवं समीक्षा ऐप",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0c1410",
+  "theme_color": "#14532d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='36' fill='%2314532d'/%3E%3Ctext x='96' y='118' font-size='44' font-family='sans-serif' font-weight='bold' fill='%23ffffff' text-anchor='middle'%3Eबिहान%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%2314532d'/%3E%3Ctext x='256' y='310' font-size='118' font-family='sans-serif' font-weight='bold' fill='%23ffffff' text-anchor='middle'%3Eबिहान%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

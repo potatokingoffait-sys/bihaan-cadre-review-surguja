@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://script.google.com https://script.googleusercontent.com https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; connect-src 'self' https://script.google.com https://script.googleusercontent.com;" />
+  <meta name="theme-color" content="#14532d" />
+  <title id="pageTitle">बिहान सरगुजा — कैडर कार्य प्रगति एवं अनुश्रवण पोर्टल (CGSRLM)</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+  <script src="cadres.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+  <!-- ======================================================================
+       SCREEN 1: UNIFIED SIGN-IN & TWO-CATEGORY REGISTRATION
+       ====================================================================== -->
+  <section id="authScreen" class="auth-wrapper">
+    <div class="auth-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; margin-bottom: 1.1rem;">
+        <div class="brand">
+          <div class="brand-badge">बिहान</div>
+          <div>
+            <div class="brand-title" id="authBrandTitle">CGSRLM बिहान — जिला सरगुजा</div>
+            <div class="brand-sub" id="authBrandSub">मासिक कैडर समीक्षा एवं अनुश्रवण पोर्टल</div>
+          </div>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" onclick="toggleLanguage()">🌐 EN / हिं</button>
+      </div>
+
+      <div class="auth-tabs">
+        <button id="tabLoginBtn" class="auth-tab active" type="button" onclick="switchAuthTab('login')">लॉगिन (Sign In)</button>
+        <button id="tabRegisterBtn" class="auth-tab" type="button" onclick="switchAuthTab('register')">नया पंजीकरण (Sign Up)</button>
+      </div>
+
+      <div id="authAlert" class="alert hidden"></div>
+
+      <!-- UNIFIED SINGLE LOGIN BOX (Auto-categorizes Department, Cadre/Others, or Developer) -->
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.9rem;">
+          एक ही लॉगिन बॉक्स — सिस्टम आपकी आईडी के आधार पर स्वतः श्रेणी (विभाग / कैडर / डेवलपर) और अधिकार तय करेगा।
+        </p>
+        <div class="field">
+          <label for="loginIdInput">लॉगिन आईडी या मोबाइल नंबर (Login ID / Mobile)</label>
+          <input id="loginIdInput" type="text" required autocomplete="username" placeholder="जैसे: DMMU_SURGUJA या कैडर कोड / मोबाइल" />
+        </div>
+        <div class="field">
+          <label for="loginPassInput">पासवर्ड (Password)</label>
+          <input id="loginPassInput" type="password" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn">सुरक्षित लॉगिन करें (Sign In)</button>
+
+        <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--border); text-align: center; font-size: 0.78rem; color: var(--text-muted);">
+          <span>नए डिवाइस पर पासवर्ड अनिवार्य • एक बार लॉगिन के बाद PIN / फिंगरप्रिंट से त्वरित अनलॉक</span>
+        </div>
+      </form>
+
+      <!-- TWO-CATEGORY SIGN UP (Department vs Others/Cadre; Developer Locked) -->
+      <form id="registerForm" class="hidden" onsubmit="handleRegisterSubmit(event)">
+        <label>पंजीकरण श्रेणी चुनें (Select Category):</label>
+        <div class="category-selector">
+          <div id="catDeptBox" class="cat-box selected" onclick="selectRegCategory('DEPARTMENT')">
+            <div style="font-weight: 700; font-size: 0.88rem;">1. विभाग (Department)</div>
+            <div style="font-size: 0.73rem; color: var(--text-muted);">BPM / ब्लॉक समन्वयक / मिशन स्टाफ</div>
+          </div>
+          <div id="catOtherBox" class="cat-box" onclick="selectRegCategory('CADRE_OTHERS')">
+            <div style="font-weight: 700; font-size: 0.88rem;">2. कैडर एवं अन्य (Others)</div>
+            <div style="font-size: 0.73rem; color: var(--text-muted);">PRP, सखी, CRP, CLF / VO पदाधिकारी</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="regRoleSelect">पद / भूमिका (Role)</label>
+          <select id="regRoleSelect" onchange="onRegRoleChange()"></select>
+        </div>
+
+        <div id="regCadreWrap" class="field hidden">
+          <label for="regCadreSelect">कैडर प्रकार (Cadre Format)</label>
+          <select id="regCadreSelect"></select>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="regName">पूरा नाम (Full Name)</label>
+            <input id="regName" type="text" required placeholder="पूरा नाम दर्ज करें" />
+          </div>
+          <div class="field">
+            <label for="regMobile">मोबाइल नंबर</label>
+            <input id="regMobile" type="tel" pattern="[0-9]{10}" required placeholder="10 अंकों का मोबाइल" />
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="regBlock">विकासखंड (Block - सरगुजा)</label>
+            <select id="regBlock" required></select>
+          </div>
+          <div class="field">
+            <label for="regClf">संकुल संगठन (CLF का नाम)</label>
+            <input id="regClf" type="text" required placeholder="CLF का नाम" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="regVo">ग्राम संगठन (VO का नाम - यदि लागू हो)</label>
+          <input id="regVo" type="text" placeholder="VO का नाम (वैकल्पिक)" />
+        </div>
+
+        <div class="form-grid">
+          <div class="field">
+            <label for="regLoginId">वांछित लॉगिन आईडी (Login ID)</label>
+            <input id="regLoginId" type="text" required placeholder="जैसे: RBK_LKP_01" />
+          </div>
+          <div class="field">
+            <label for="regPass">पासवर्ड (कम से कम 6 अक्षर)</label>
+            <input id="regPass" type="password" minlength="6" required placeholder="मजबूत पासवर्ड बनाएं" />
+          </div>
+        </div>
+
+        <div style="font-size: 0.74rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+          नोट: DMMU, Zilla CEO एवं Developer खाते सुरक्षा कारणों से केवल सिस्टम एडमिन द्वारा सक्रिय किए जाते हैं।
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">पंजीकरण अनुरोध भेजें</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       SCREEN 2: DEVICE QUICK UNLOCK (FINGERPRINT / BIOMETRIC & 4-DIGIT PIN)
+       ====================================================================== -->
+  <section id="unlockScreen" class="auth-wrapper hidden">
+    <div class="auth-card" style="text-align: center;">
+      <div class="brand-badge" style="margin: 0 auto 0.75rem;">🔒</div>
+      <h2 style="font-size: 1.15rem; margin-bottom: 0.25rem;" id="unlockUserName">स्वागत है</h2>
+      <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;" id="unlockUserRole">सत्यापित डिवाइस सत्र</p>
+
+      <div id="unlockAlert" class="alert alert-danger hidden"></div>
+
+      <button id="biometricUnlockBtn" type="button" class="btn btn-primary btn-block" style="margin-bottom: 0.9rem;" onclick="unlockWithBiometric()">
+        👆 फिंगरप्रिंट / बायोमेट्रिक से खोलें
+      </button>
+
+      <div id="pinUnlockArea">
+        <div style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">या 4-अंकों का सुरक्षा PIN दर्ज करें</div>
+        <div class="pin-dots" id="pinDots">
+          <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+        </div>
+        <div class="pin-pad">
+          <button type="button" class="pin-key" onclick="enterPinDigit('1')">1</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('2')">2</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('3')">3</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('4')">4</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('5')">5</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('6')">6</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('7')">7</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('8')">8</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('9')">9</button>
+          <button type="button" class="pin-key" onclick="clearPin()">C</button>
+          <button type="button" class="pin-key" onclick="enterPinDigit('0')">0</button>
+          <button type="button" class="pin-key" onclick="backspacePin()">⌫</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 1rem; display: flex; justify-content: center; gap: 0.75rem;">
+        <button type="button" class="btn btn-outline btn-sm" onclick="bypassLockIfNoPin()">सीधे प्रवेश करें (यदि PIN सेट नहीं है)</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="logoutUser()">खाता बदलें / लॉगआउट</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================================
+       SCREEN 3: MAIN APPLICATION PORTAL
+       ====================================================================== -->
+  <div id="appShell" class="hidden">
+    <!-- DEVELOPER-ONLY IN-APP PERSPECTIVE SWITCHER (Strictly invisible to all non-developer users) -->
+    <div id="devPerspectiveBar" class="hidden no-print" style="background: #1e1b4b; color: #e0e7ff; padding: 0.55rem 1.25rem; border-bottom: 2px solid #818cf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.6rem; font-size: 0.82rem;">
+      <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+        <span style="background:#4f46e5; color:#fff; padding:2px 8px; border-radius:6px; font-weight:800;">🛠️ DEV VIEW-AS</span>
+        <span>दृष्टिकोण चुनें (Preview Role):</span>
+        <select id="devPreviewRole" onchange="onDevPreviewRoleChange()" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;">
+          <option value="DEVELOPER">Developer (पूर्ण नियंत्रण / Default)</option>
+          <option value="DMMU">DMMU सरगुजा (जिला मिशन प्रबंधक)</option>
+          <option value="ZILLA_CEO">CEO जिला पंचायत सरगुजा</option>
+          <option value="BPM">BPM / ब्लॉक समन्वयक (Block Level)</option>
+          <option value="CLF_ADMIN">CLF पदाधिकारी / लेखापाल (Cluster Level)</option>
+          <option value="VO_ADMIN">VO पदाधिकारी (Village Org Level)</option>
+          <option value="CADRE">सामुदायिक कैडर (Field Cadre View)</option>
+          <option value="SPECIFIC_USER">किसी पंजीकृत यूज़र के रूप में देखें...</option>
+        </select>
+
+        <select id="devPreviewCadre" onchange="applyDevPerspective()" class="hidden" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;"></select>
+
+        <select id="devPreviewBlock" onchange="applyDevPerspective()" class="hidden" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;"></select>
+
+        <select id="devPreviewSpecificUser" onchange="applyDevPerspective()" class="hidden" style="width:auto; padding:0.3rem 0.55rem; font-size:0.8rem; background:#312e81; color:#fff; border-color:#6366f1;">
+          <option value="">-- पंजीकृत यूज़र चुनें --</option>
+        </select>
+      </div>
+      <div style="display:flex; align-items:center; gap:0.5rem;">
+        <span id="devPreviewStatusBadge" style="color:#a5b4fc;">Active: Developer Root</span>
+        <button type="button" class="btn btn-sm" style="background:#4f46e5; color:#fff; padding:0.25rem 0.6rem;" onclick="resetDevPerspective()">रीसेट (Developer)</button>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-badge">बिहान</div>
+        <div>
+          <div class="brand-title">CGSRLM सरगुजा — मासिक अनुश्रवण पोर्टल</div>
+          <div class="brand-sub" id="headerUserSubtitle">जिला पंचायत सरगुजा (छ.ग.)</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+        <button type="button" class="btn btn-outline btn-sm" id="langToggleBtn" onclick="toggleLanguage()">🌐 EN / हिं</button>
+        <span class="role-pill" id="headerRoleBadge">ROLE</span>
+        <button type="button" class="btn btn-outline btn-sm" id="syncBtn" onclick="syncData()">🔄 सिंक</button>
+        <button type="button" class="btn btn-outline btn-sm" id="lockBtn" onclick="lockAppNow()">🔒 लॉक</button>
+      </div>
+    </header>
+
+    <nav class="nav-tabs" id="mainNavTabs">
+      <button class="nav-btn active" data-tab="tabDashboard" onclick="switchMainTab('tabDashboard', this)">📊 डैशबोर्ड एवं रिपोर्ट्स</button>
+      <button class="nav-btn" data-tab="tabEntry" id="navEntryBtn" onclick="switchMainTab('tabEntry', this)">📝 नया मासिक प्रतिवेदन</button>
+      <button class="nav-btn hidden" data-tab="tabAdmin" id="navAdminBtn" onclick="switchMainTab('tabAdmin', this)">🛡️ एडमिन व यूज़र नियंत्रण</button>
+      <button class="nav-btn" data-tab="tabSettings" onclick="switchMainTab('tabSettings', this)">⚙️ सेटिंग्स (Theme, PIN, Account)</button>
+    </nav>
+
+    <main class="container">
+      <div id="globalAlert" class="alert hidden"></div>
+
+      <!-- TAB 1: DASHBOARD, ANALYTICS CHARTS & ROLE-SCOPED REPORTS TABLE -->
+      <section id="tabDashboard">
+        <!-- Filters -->
+        <div class="card no-print">
+          <div class="form-grid">
+            <div class="field" style="margin:0;">
+              <label for="filterMonth">माह व वर्ष (Month-Year)</label>
+              <select id="filterMonth" onchange="renderDashboard()">
+                <option value="ALL">सभी माह (All Months)</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;" id="filterBlockWrap">
+              <label for="filterBlock">विकासखंड (Block)</label>
+              <select id="filterBlock" onchange="renderDashboard()">
+                <option value="ALL">सभी 7 विकासखंड (जिला सरगुजा)</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0;" id="filterCadreWrap">
+              <label for="filterCadre">कैडर प्रकार (Cadre)</label>
+              <select id="filterCadre" onchange="renderDashboard()">
+                <option value="ALL">सभी 10 कैडर प्रारूप</option>
+              </select>
+            </div>
+            <div class="field" style="margin:0; display:flex; align-items:flex-end; gap:0.5rem; flex-wrap:wrap;">
+              <button type="button" class="btn btn-outline btn-sm" id="clearFilterBtn" onclick="clearAllFilters()">✕ Remove Filter</button>
+              <button type="button" class="btn btn-outline btn-sm" id="printPdfBtn" onclick="window.print()">🖨️ Print / PDF</button>
+              <a id="gsheetDirectLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm hidden">📗 Google Sheet</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary KPI Cards -->
+        <div class="stat-grid">
+          <div class="stat-box">
+            <div class="stat-label">कुल जमा प्रतिवेदन (Total Reports)</div>
+            <div class="stat-value" id="statTotalReports">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">औसत प्राप्तांक (Avg Score / 100)</div>
+            <div class="stat-value" id="statAvgScore">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">ग्रेड-A (80–100 अंक) कैडर</div>
+            <div class="stat-value" id="statGradeA">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">ग्रेड-C/D (सुधार आवश्यक)</div>
+            <div class="stat-value" id="statGradeCD" style="color: var(--danger);">0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">कुल अनुशंसित मानदेय (₹)</div>
+            <div class="stat-value" id="statHonorarium">₹0</div>
+          </div>
+        </div>
+
+        <!-- Interactive Charts (Shown prominently for DMMU, Zilla CEO, Developer & Block/CLF reviewers) -->
+        <div id="analyticsChartsSection" class="chart-grid">
+          <div class="chart-box">
+            <div class="card-title" style="margin-bottom: 0.6rem;">विकासखंडवार प्रतिवेदन एवं औसत स्कोर (Block-wise)</div>
+            <canvas id="blockChart"></canvas>
+          </div>
+          <div class="chart-box">
+            <div class="card-title" style="margin-bottom: 0.6rem;">कैडरवार प्रदर्शन एवं ग्रेड वितरण (Cadre & Grade Mix)</div>
+            <canvas id="gradeChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Reports List & Actions -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">मासिक कार्य प्रतिवेदन सूची (भाग-2 व भाग-3 समेकित रिकॉर्ड)</div>
+            <span style="font-size: 0.78rem; color: var(--text-muted);" id="accessScopeNote"></span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>माह/वर्ष</th>
+                  <th>कैडर</th>
+                  <th>नाम / मोबाइल</th>
+                  <th>विकासखंड / CLF / VO</th>
+                  <th>प्राप्तांक</th>
+                  <th>ग्रेड</th>
+                  <th>मानदेय (₹)</th>
+                  <th>समीक्षा स्थिति</th>
+                  <th class="no-print">कार्यवाही</th>
+                </tr>
+              </thead>
+              <tbody id="reportsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- DMMU / CEO District Review Directives (भाग-3 ब निष्कर्ष) -->
+        <div id="districtDirectiveCard" class="card hidden">
+          <div class="card-header">
+            <div class="card-title">जिला स्तरीय समीक्षा निष्कर्ष एवं निर्देश (DMMU / CEO जिला पंचायत सरगुजा)</div>
+          </div>
+          <form onsubmit="saveDistrictDirective(event)">
+            <div class="form-grid">
+              <div class="field">
+                <label>माह व वर्ष</label>
+                <input id="dirMonth" type="month" required />
+              </div>
+              <div class="field">
+                <label>संबंधित कैडर</label>
+                <select id="dirCadre"></select>
+              </div>
+              <div class="field">
+                <label>शीर्ष प्रदर्शन CLF (1)</label>
+                <input id="dirTop1" type="text" placeholder="प्रथम CLF का नाम" />
+              </div>
+              <div class="field">
+                <label>शीर्ष प्रदर्शन CLF (2)</label>
+                <input id="dirTop2" type="text" placeholder="द्वितीय CLF का नाम" />
+              </div>
+              <div class="field">
+                <label>शीर्ष प्रदर्शन CLF (3)</label>
+                <input id="dirTop3" type="text" placeholder="तृतीय CLF का नाम" />
+              </div>
+              <div class="field">
+                <label>ग्रेड C/D प्रशिक्षण विकासखंड व तिथि</label>
+                <input id="dirTraining" type="text" placeholder="जैसे: लखनपुर - 15/12/2026" />
+              </div>
+            </div>
+            <div class="field">
+              <label>जिला मिशन प्रबंधक / CEO जिला पंचायत के निर्देश</label>
+              <textarea id="dirRemarks" rows="2" placeholder="अंतर-विभागीय अभिसरण व प्रशिक्षण निर्देश..."></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">जिला निर्देश सुरक्षित करें</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 2: MONTHLY REPORT ENTRY / EDIT / REVIEW FORM (ALL 10 FORMATS) -->
+      <section id="tabEntry" class="hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="formHeaderTitle">मासिक कार्य प्रगति प्रतिवेदन प्रपत्र</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted);" id="formHierarchyNote"></div>
+            </div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="resetReportForm()">नया फॉर्म रीसेट करें</button>
+          </div>
+
+          <form id="monthlyReportForm" onsubmit="submitMonthlyReport(event)">
+            <input type="hidden" id="editingReportId" value="" />
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="formCadreType">कैडर प्रारूप चुनें (Cadre Format)</label>
+                <select id="formCadreType" onchange="buildDynamicKpiForm()"></select>
+              </div>
+              <div class="field">
+                <label for="formMonthYear">प्रतिवेदन माह व वर्ष</label>
+                <input id="formMonthYear" type="month" required />
+              </div>
+              <div class="field">
+                <label for="formBlock">विकासखंड (सरगुजा)</label>
+                <select id="formBlock" required></select>
+              </div>
+              <div class="field">
+                <label for="formClf">संकुल स्तरीय संगठन (CLF) का नाम</label>
+                <input id="formClf" type="text" required />
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="formVo">ग्राम संगठन (VO) / OSF / बैंक शाखा</label>
+                <input id="formVo" type="text" />
+              </div>
+              <div class="field">
+                <label for="formGp">ग्राम पंचायत / ग्राम</label>
+                <input id="formGp" type="text" />
+              </div>
+              <div class="field">
+                <label for="formCadreName">कैडर का पूरा नाम</label>
+                <input id="formCadreName" type="text" required />
+              </div>
+              <div class="field">
+                <label for="formMobile">कैडर कोड / मोबाइल नंबर</label>
+                <input id="formMobile" type="text" required />
+              </div>
+            </div>
+
+            <div class="form-grid">
+              <div class="field">
+                <label for="formAllocVo">आवंटित कुल VO / GP / PG संख्या</label>
+                <input id="formAllocVo" type="text" placeholder="जैसे: 08 VO" />
+              </div>
+              <div class="field">
+                <label for="formAllocShg">आवंटित कुल SHG / उद्यमी / परिवार संख्या</label>
+                <input id="formAllocShg" type="text" placeholder="जैसे: 85 SHG" />
+              </div>
+            </div>
+
+            <!-- Dynamic KPI Table -->
+            <div class="table-wrap" style="margin: 1rem 0;">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width: 44px;">क्र.</th>
+                    <th>समीक्षा बिंदु / कार्य संकेतक (KPI)</th>
+                    <th style="width: 110px;">मासिक लक्ष्य</th>
+                    <th style="width: 110px;">पूर्ण उपलब्धि</th>
+                    <th style="width: 85px;">प्रगति %</th>
+                    <th style="width: 115px;" id="kpiMarksColHeader">अधिकतम / प्राप्त अंक</th>
+                    <th style="width: 130px;">सत्यापन साक्ष्य</th>
+                  </tr>
+                </thead>
+                <tbody id="dynamicKpiBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Section E: Numerical Summary for District Consolidation -->
+            <div style="margin: 1.1rem 0;">
+              <div class="card-title" style="margin-bottom: 0.6rem;">खंड-ई: संक्षिप्त स्थिति विवरण (जिला समरी हेतु अनिवार्य संख्यात्मक डेटा)</div>
+              <div class="form-grid" id="dynamicSectionE"></div>
+            </div>
+
+            <!-- Remarks, Grading & Honorarium -->
+            <div class="form-grid">
+              <div class="field">
+                <label for="formCadreRemarks">कैडर द्वारा दर्ज प्रमुख उपलब्धि / क्षेत्रीय चुनौती</label>
+                <textarea id="formCadreRemarks" rows="2"></textarea>
+              </div>
+              <div class="field" id="reviewerRemarksWrap">
+                <label for="formReviewerRemarks">VO / CLF समीक्षा समिति की टिप्पणी एवं निर्देश</label>
+                <textarea id="formReviewerRemarks" rows="2"></textarea>
+              </div>
+            </div>
+
+            <div class="card" style="background: var(--surface-2); margin-top: 0.75rem;">
+              <div class="form-grid">
+                <div class="field" style="margin:0;" id="totalScoreFieldWrap">
+                  <label id="lblTotalScore">कुल प्राप्तांक (Total Score / 100)</label>
+                  <input id="formTotalScore" type="number" readonly value="0" style="font-weight: 800; font-size: 1.1rem;" />
+                </div>
+                <div class="field" style="margin:0;" id="gradeFieldWrap">
+                  <label id="lblGrade">ग्रेड (Grade A / B / C / D)</label>
+                  <input id="formGrade" type="text" readonly value="-" style="font-weight: 800; font-size: 1.1rem;" />
+                </div>
+                <div class="field" style="margin:0;" id="honorariumFieldWrap">
+                  <label for="formHonorarium" id="lblHonorarium">अनुशंसित मासिक मानदेय (₹)</label>
+                  <input id="formHonorarium" type="number" min="0" value="0" />
+                </div>
+                <div class="field" style="margin:0;" id="approvalActionWrap">
+                  <label for="formReviewAction" id="lblApprovalAction">सत्यापन / अनुमोदन स्थिति</label>
+                  <select id="formReviewAction">
+                    <option value="SUBMITTED">कैडर द्वारा प्रस्तुत (Submitted)</option>
+                    <option value="VO_VERIFIED">VO द्वारा सत्यापित (VO Verified)</option>
+                    <option value="CLF_APPROVED">CLF द्वारा अनुमोदित (CLF Approved)</option>
+                    <option value="BMMU_VERIFIED">BMMU द्वारा सत्यापित (BPM Verified)</option>
+                    <option value="DMMU_APPROVED">DMMU / CEO अंतिम अनुमोदन</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1rem;">
+              <button type="submit" class="btn btn-primary">💾 Save</button>
+              <button type="button" class="btn btn-outline" onclick="switchMainTab('tabDashboard', document.querySelector('[data-tab=tabDashboard]'))">रद्द करें</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 3: DMMU / ZILLA CEO / DEVELOPER ABSOLUTE CONTROL PANEL -->
+      <section id="tabAdmin" class="hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">यूज़र खाता प्रबंधन एवं अनुमोदन (User Access Control)</div>
+            <span class="role-pill">केवल DMMU, Zilla CEO एवं Developer</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>User ID</th>
+                  <th>नाम</th>
+                  <th>श्रेणी</th>
+                  <th>भूमिका (Role)</th>
+                  <th>कैडर</th>
+                  <th>विकासखंड / CLF</th>
+                  <th>स्थिति</th>
+                  <th>अंतिम डिवाइस</th>
+                  <th>कार्यवाही</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" id="auditLogCard">
+          <div class="card-header">
+            <div class="card-title">सुरक्षा ऑडिट लॉग (Security & Change Trail)</div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadAuditLogs()">लॉग रिफ्रेश करें</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>समय (Timestamp)</th>
+                  <th>Actor ID</th>
+                  <th>Role</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>विवरण</th>
+                </tr>
+              </thead>
+              <tbody id="auditLogsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: SETTINGS (THEME, BIOMETRIC/PIN, ACCOUNT INFO, PASSWORD) -->
+      <section id="tabSettings" class="hidden">
+        <div class="form-grid">
+          <!-- Display & Theme Settings -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🎨 डिस्प्ले एवं थीम मोड (Appearance Settings)</div>
+            </div>
+            <div class="field">
+              <label for="themeSelect">ऐप थीम चुनें (Default: फ़ोन सिस्टम मोड)</label>
+              <select id="themeSelect" onchange="applyTheme(this.value)">
+                <option value="system">📱 Default Phone Mode (फ़ोन के अनुसार स्वतः)</option>
+                <option value="light">☀️ Light Mode (उजला मोड)</option>
+                <option value="dark">🌙 Dark Mode (डार्क मोड)</option>
+                <option value="high-contrast">👁️ High Contrast Mode (उच्च कंट्रास्ट)</option>
+              </select>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">
+              आपकी थीम पसंद इस डिवाइस पर सुरक्षित रहती है और फ़ील्ड में धूप या रात के समय स्पष्ट पठनीयता देती है।
+            </p>
+          </div>
+
+          <!-- Biometric & PIN Device Lock Settings -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔐 फिंगरप्रिंट एवं PIN लॉक (Device Quick Security)</div>
+            </div>
+            <div class="field">
+              <label for="newPinInput">4-अंकों का नया PIN सेट / बदलें</label>
+              <input id="newPinInput" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="4 अंक दर्ज करें (जैसे: 2580)" />
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="saveDevicePin()">PIN सुरक्षित करें</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="registerDeviceBiometric()">👆 फिंगरप्रिंट / बायोमेट्रिक जोड़ें</button>
+            </div>
+            <p id="biometricStatusText" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.65rem;"></p>
+          </div>
+        </div>
+
+        <!-- Account Info & Password Change -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">👤 खाता विवरण एवं पासवर्ड प्रबंधन (Account & Credentials)</div>
+            <button type="button" class="btn btn-danger btn-sm" onclick="logoutUser()">इस डिवाइस से लॉगआउट करें</button>
+          </div>
+          <form onsubmit="updateAccountSettings(event)">
+            <div class="form-grid">
+              <div class="field">
+                <label>लॉगिन आईडी (Login ID - अपरिवर्तनीय)</label>
+                <input id="setUserId" type="text" readonly />
+              </div>
+              <div class="field">
+                <label>श्रेणी एवं भूमिका (Category & Role)</label>
+                <input id="setRoleInfo" type="text" readonly />
+              </div>
+              <div class="field">
+                <label>आवंटित कार्यक्षेत्र (Block / CLF / VO)</label>
+                <input id="setJurisdiction" type="text" readonly />
+              </div>
+              <div class="field">
+                <label for="setFullName">पूरा नाम (Full Name)</label>
+                <input id="setFullName" type="text" required />
+              </div>
+              <div class="field">
+                <label for="setMobile">मोबाइल नंबर</label>
+                <input id="setMobile" type="tel" />
+              </div>
+              <div class="field">
+                <label for="setNewPassword">नया पासवर्ड (बदलने के लिए भरें, कम से कम 6 अक्षर)</label>
+                <input id="setNewPassword" type="password" minlength="6" placeholder="खाली छोड़ें यदि नहीं बदलना है" />
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">प्रोफ़ाइल व पासवर्ड अपडेट करें</button>
+          </form>
+        </div>
+
+        <!-- Absolute Admin Only: Backend Connection & GSheet Link -->
+        <div id="adminSystemSettingsCard" class="card hidden">
+          <div class="card-header">
+            <div class="card-title">🛠️ सिस्टम एवं Google Sheet नियंत्रण (DMMU / Zilla CEO / Developer Only)</div>
+          </div>
+          <div class="field">
+            <label for="adminGasUrl">Google Apps Script API Endpoint URL</label>
+            <input id="adminGasUrl" type="url" />
+          </div>
+          <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="saveAdminGasUrl()">API URL अपडेट करें</button>
+            <a id="adminGsheetBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">मास्टर Google Sheet खोलें</a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+</body>
+</html>
