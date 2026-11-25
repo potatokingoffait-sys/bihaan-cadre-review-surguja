@@ -226,6 +226,7 @@
       <button class="nav-btn active" data-tab="tabDashboard" onclick="switchMainTab('tabDashboard', this)">📊 डैशबोर्ड एवं रिपोर्ट्स</button>
       <button class="nav-btn" data-tab="tabEntry" id="navEntryBtn" onclick="switchMainTab('tabEntry', this)">📝 नया मासिक प्रतिवेदन</button>
       <button class="nav-btn hidden" data-tab="tabAdmin" id="navAdminBtn" onclick="switchMainTab('tabAdmin', this)">🛡️ एडमिन व यूज़र नियंत्रण</button>
+      <button class="nav-btn hidden" data-tab="tabDeleted" id="navDeletedBtn" onclick="switchMainTab('tabDeleted', this)">🗑️ Deleted Data</button>
       <button class="nav-btn" data-tab="tabSettings" onclick="switchMainTab('tabSettings', this)">⚙️ सेटिंग्स (Theme, PIN, Account)</button>
     </nav>
 
@@ -309,15 +310,15 @@
             <table>
               <thead>
                 <tr>
-                  <th>माह/वर्ष</th>
-                  <th>कैडर</th>
-                  <th>नाम / मोबाइल</th>
-                  <th>विकासखंड / CLF / VO</th>
-                  <th>प्राप्तांक</th>
-                  <th>ग्रेड</th>
-                  <th>मानदेय (₹)</th>
-                  <th>समीक्षा स्थिति</th>
-                  <th class="no-print">कार्यवाही</th>
+                  <th data-i18n="thMonth">माह/वर्ष</th>
+                  <th data-i18n="thCadre">कैडर</th>
+                  <th data-i18n="thNameMobile">नाम / मोबाइल</th>
+                  <th data-i18n="thJurisdiction">विकासखंड / CLF / VO</th>
+                  <th data-i18n="thScore">प्राप्तांक</th>
+                  <th data-i18n="thGrade">ग्रेड</th>
+                  <th data-i18n="thHonorarium">मानदेय (₹)</th>
+                  <th data-i18n="thStatus">समीक्षा स्थिति</th>
+                  <th class="no-print" data-i18n="thAction">कार्यवाही</th>
                 </tr>
               </thead>
               <tbody id="reportsTableBody"></tbody>
@@ -434,13 +435,13 @@
               <table>
                 <thead>
                   <tr>
-                    <th style="width: 44px;">क्र.</th>
-                    <th>समीक्षा बिंदु / कार्य संकेतक (KPI)</th>
-                    <th style="width: 110px;">मासिक लक्ष्य</th>
-                    <th style="width: 110px;">पूर्ण उपलब्धि</th>
-                    <th style="width: 85px;">प्रगति %</th>
-                    <th style="width: 115px;" id="kpiMarksColHeader">अधिकतम / प्राप्त अंक</th>
-                    <th style="width: 130px;">सत्यापन साक्ष्य</th>
+                    <th style="width: 44px;" data-i18n="thSno">क्र.</th>
+                    <th data-i18n="thKpi">समीक्षा बिंदु / कार्य संकेतक (KPI)</th>
+                    <th style="width: 110px;" data-i18n="thTarget">मासिक लक्ष्य</th>
+                    <th style="width: 110px;" data-i18n="thAchieved">पूर्ण उपलब्धि</th>
+                    <th style="width: 85px;" data-i18n="thPct">प्रगति %</th>
+                    <th style="width: 115px;" id="kpiMarksColHeader" data-i18n="thMarks">अधिकतम / प्राप्त अंक</th>
+                    <th style="width: 155px;" data-i18n="thEvidence">सत्यापन साक्ष्य</th>
                   </tr>
                 </thead>
                 <tbody id="dynamicKpiBody"></tbody>
@@ -545,6 +546,34 @@
                 </tr>
               </thead>
               <tbody id="auditLogsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3B: DELETED DATA & WHO DELETED IT (DMMU / ZILLA CEO / DEVELOPER) -->
+      <section id="tabDeleted" class="hidden">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title" data-i18n="deletedTabTitle">Deleted Records & Who Deleted Them</div>
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadDeletedRecords()" data-i18n="refreshBtn">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th data-i18n="thDeletedAt">Deleted At</th>
+                  <th data-i18n="thDeletedBy">Deleted By</th>
+                  <th data-i18n="thRole">Role</th>
+                  <th data-i18n="thReportId">Report ID</th>
+                  <th data-i18n="thMonth">Month</th>
+                  <th data-i18n="thCadre">Cadre</th>
+                  <th data-i18n="thNameMobile">Cadre Name</th>
+                  <th data-i18n="thJurisdiction">Block / CLF</th>
+                  <th data-i18n="thScore">Score / Grade</th>
+                </tr>
+              </thead>
+              <tbody id="deletedRecordsBody"></tbody>
             </table>
           </div>
         </div>

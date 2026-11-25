@@ -532,6 +532,7 @@ async function enterPortal(skipSync = false, freshLogin = false) {
   document.getElementById("districtDirectiveCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("adminSystemSettingsCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("auditLogCard").classList.toggle("hidden", !isAbsAdmin);
+  document.getElementById("navDeletedBtn").classList.toggle("hidden", !isAbsAdmin);
 
   const t = I18N[currentLang] || I18N.en;
   const isCadreUser = currentUser.role === "CADRE";
@@ -584,12 +585,13 @@ async function enterPortal(skipSync = false, freshLogin = false) {
 }
 
 function switchMainTab(tabId, btnEl) {
-  ["tabDashboard", "tabEntry", "tabAdmin", "tabSettings"].forEach(id => {
+  ["tabDashboard", "tabEntry", "tabAdmin", "tabDeleted", "tabSettings"].forEach(id => {
     document.getElementById(id).classList.add("hidden");
   });
   document.getElementById(tabId).classList.remove("hidden");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   if (btnEl) btnEl.classList.add("active");
+  if (tabId === "tabDeleted") loadDeletedRecords();
 }
 
 async function syncData() {
@@ -856,23 +858,43 @@ function buildDynamicKpiForm(existingData = null) {
       const pctVal = savedKpi ? savedKpi.pct : "";
       const marksVal = savedKpi ? savedKpi.marks : "";
 
-      const savedPhoto = savedKpi && savedKpi.evidencePhoto ? savedKpi.evidencePhoto : "";
-      const savedPhotoName = savedKpi && savedKpi.evidenceFileName ? savedKpi.evidenceFileName : "";
+      let savedPhotos = [];
+      if (savedKpi && Array.isArray(savedKpi.evidencePhotos) && savedKpi.evidencePhotos.length) {
+        savedPhotos = savedKpi.evidencePhotos;
+      } else if (savedKpi && Array.isArray(savedKpi.evidencePhotoUrls) && savedKpi.evidencePhotoUrls.length) {
+        savedPhotos = savedKpi.evidencePhotoUrls.map((u, idx) => ({
+          name: (savedKpi.evidencePhotoNames && savedKpi.evidencePhotoNames[idx]) || ("Photo_" + (idx + 1) + ".jpg"),
+          type: "image/jpeg",
+          url: u,
+          dataUrl: u
+        }));
+      } else if (savedKpi && savedKpi.evidencePhoto) {
+        savedPhotos = [{
+          name: savedKpi.evidenceFileName || "Photo_1.jpg",
+          type: "image/jpeg",
+          url: savedKpi.evidencePhoto.startsWith("http") ? savedKpi.evidencePhoto : "",
+          dataUrl: savedKpi.evidencePhoto
+        }];
+      }
+      const savedPhoto = savedPhotos.length ? (savedPhotos[0].dataUrl || savedPhotos[0].url || "") : "";
+      const savedPhotoName = savedPhotos.map(x => x.name).join(", ");
 
       const tr = document.createElement("tr");
       tr.dataset.kpiId = kpi.id;
       tr.dataset.maxMarks = kpi.maxMarks || 0;
       tr.dataset.evidencePhoto = savedPhoto;
       tr.dataset.evidenceFileName = savedPhotoName;
+      tr.dataset.evidencePhotosJson = JSON.stringify(savedPhotos);
 
+      const statusPlaceholder = currentLang === "en" ? "Completed / In Progress" : "पूर्ण / प्रगतिशील";
       const marksCell = schema.hasScoring
         ? `<div style="display:flex; align-items:center; gap:4px;">
              <span>${kpi.maxMarks} /</span>
              <input type="number" class="kpi-marks" min="0" max="${kpi.maxMarks}" step="0.5"
-               value="${escHtml(marksVal)}" ${canScore ? "" : "readonly title='अंक केवल VO/CLF/DMMU समीक्षा स्तर पर भरे जाएंगे'"}
+               value="${escHtml(marksVal)}" ${canScore ? "" : "readonly title='Scores are entered at VO/CLF/DMMU review'"}
                oninput="recalculateTotals()" style="width:65px; padding:4px;" />
            </div>`
-        : `<input type="text" class="kpi-marks" value="${escHtml(marksVal)}" placeholder="पूर्ण/प्रगतिशील" style="padding:4px;" />`;
+        : `<input type="text" class="kpi-marks" value="${escHtml(marksVal)}" placeholder="${escHtml(statusPlaceholder)}" style="padding:4px;" />`;
 
       const photoPreviewHtml = savedPhoto
         ? `<div class="kpi-photo-preview" style="margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -891,14 +913,15 @@ function buildDynamicKpiForm(existingData = null) {
         <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
         <td>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">${escHtml(kpi.evidence)}</div>
-          <label class="btn btn-outline btn-sm" style="padding:3px 8px; font-size:0.72rem; margin:0; cursor:pointer; display:inline-flex;">
-            📷 Upload Photo
-            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" style="display:none;" onchange="handleKpiEvidenceUpload(this)" />
+          <label class="btn btn-outline btn-sm" style="padding:3px 8px; font-size:0.72rem; margin:0; cursor:pointer; display:inline-flex; white-space:nowrap;">
+            <span data-i18n="uploadPhotosBtn">${currentLang === "en" ? "📷 Upload Photos" : "📷 फ़ोटो अपलोड करें"}</span>
+            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" multiple style="display:none;" onchange="handleKpiEvidenceUpload(this)" />
           </label>
-          ${photoPreviewHtml}
+          <div class="kpi-photo-preview" style="margin-top:4px;"></div>
         </td>
       `;
       tbody.appendChild(tr);
+      renderKpiPhotosPreview_(tr);
     });
   });
 
@@ -920,63 +943,141 @@ function buildDynamicKpiForm(existingData = null) {
 }
 
 
-function handleKpiEvidenceUpload(fileInput) {
-  const file = fileInput.files && fileInput.files[0];
-  if (!file) return;
+function compressImageToDataUrl_(file, maxWidth = 900, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    if (!file.type || !file.type.startsWith("image/")) {
+      const r = new FileReader();
+      r.onload = e => resolve(String(e.target.result || ""));
+      r.onerror = reject;
+      r.readAsDataURL(file);
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width;
+      let h = img.height;
+      if (w > maxWidth) {
+        h = Math.round((h * maxWidth) / w);
+        w = maxWidth;
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = err => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+}
+
+function renderKpiPhotosPreview_(tr) {
+  const prevDiv = tr.querySelector(".kpi-photo-preview");
+  if (!prevDiv) return;
+  let photos = [];
+  try { photos = JSON.parse(tr.dataset.evidencePhotosJson || "[]"); } catch (e) { photos = []; }
+  if (!photos.length) {
+    prevDiv.innerHTML = "";
+    return;
+  }
+  prevDiv.innerHTML = photos.map((p, idx) => {
+    const src = p.dataUrl || p.url || "";
+    const isImg = String(p.type || "").startsWith("image/") || src.startsWith("data:image/") || !!p.url;
+    const thumb = isImg && src
+      ? `<img src="${src}" alt="${escHtml(p.name)}" style="width:38px; height:38px; object-fit:cover; border-radius:6px; border:1px solid var(--border);" />`
+      : `<span style="font-size:0.72rem; padding:2px 6px; border-radius:4px; background:var(--surface-2);">📄</span>`;
+    const linkOpen = p.url ? `<a href="${escHtml(p.url)}" target="_blank" rel="noopener noreferrer" style="font-size:0.7rem; color:var(--primary);">Drive Link</a>` : "";
+    return `
+      <div style="display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-top:4px; background:var(--surface-2); padding:3px 6px; border-radius:6px;">
+        ${thumb}
+        <span style="font-size:0.7rem; color:var(--text); word-break:break-all;">${escHtml(p.name || ("Photo " + (idx + 1)))}</span>
+        ${linkOpen}
+        <button type="button" class="btn btn-danger btn-sm" style="padding:1px 5px; font-size:0.68rem;" onclick="removeKpiPhotoAt(this, ${idx})">✕</button>
+      </div>
+    `;
+  }).join("");
+}
+
+async function handleKpiEvidenceUpload(fileInput) {
+  const files = Array.from(fileInput.files || []);
+  if (!files.length) return;
   const tr = fileInput.closest("tr");
   if (!tr) return;
 
-  if (file.size > 2 * 1024 * 1024) {
-    showAlert("globalAlert", "Please select an image/file under 2 MB for fast sync.", "danger");
-    fileInput.value = "";
-    return;
+  let existing = [];
+  try { existing = JSON.parse(tr.dataset.evidencePhotosJson || "[]"); } catch (e) { existing = []; }
+
+  for (const file of files) {
+    if (file.size > 10 * 1024 * 1024) {
+      showAlert("globalAlert", "File too large (>10 MB): " + file.name, "danger");
+      continue;
+    }
+    try {
+      const dataUrl = await compressImageToDataUrl_(file, 900, 0.72);
+      existing.push({
+        name: file.name,
+        type: file.type || "image/jpeg",
+        dataUrl: dataUrl,
+        url: ""
+      });
+    } catch (err) {
+      showAlert("globalAlert", "Could not read photo: " + file.name, "danger");
+    }
   }
 
-  const reader = new FileReader();
-  reader.onload = function(evt) {
-    const dataUrl = evt.target && evt.target.result ? String(evt.target.result) : "";
-    tr.dataset.evidencePhoto = dataUrl;
-    tr.dataset.evidenceFileName = file.name;
+  tr.dataset.evidencePhotosJson = JSON.stringify(existing);
+  tr.dataset.evidencePhoto = existing.length ? (existing[0].dataUrl || existing[0].url || "") : "";
+  tr.dataset.evidenceFileName = existing.map(x => x.name).join(", ");
+  fileInput.value = "";
+  renderKpiPhotosPreview_(tr);
+}
 
-    const prevDiv = tr.querySelector(".kpi-photo-preview");
-    if (prevDiv) {
-      const thumb = file.type.startsWith("image/")
-        ? `<img src="${dataUrl}" alt="${escHtml(file.name)}" style="width:42px; height:42px; object-fit:cover; border-radius:6px; border:1px solid var(--border);" />`
-        : `<span style="font-size:0.72rem; padding:2px 6px; border-radius:4px; background:var(--surface-2);">📄</span>`;
-      prevDiv.innerHTML = `
-        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:2px;">
-          ${thumb}
-          <span style="font-size:0.72rem; color:var(--primary); word-break:break-all;">${escHtml(file.name)}</span>
-          <button type="button" class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:0.7rem;" onclick="clearKpiEvidence(this)">✕</button>
-        </div>
-      `;
-    }
-  };
-  reader.readAsDataURL(file);
+function removeKpiPhotoAt(btnEl, idx) {
+  const tr = btnEl.closest("tr");
+  if (!tr) return;
+  let existing = [];
+  try { existing = JSON.parse(tr.dataset.evidencePhotosJson || "[]"); } catch (e) { existing = []; }
+  existing.splice(idx, 1);
+  tr.dataset.evidencePhotosJson = JSON.stringify(existing);
+  tr.dataset.evidencePhoto = existing.length ? (existing[0].dataUrl || existing[0].url || "") : "";
+  tr.dataset.evidenceFileName = existing.map(x => x.name).join(", ");
+  renderKpiPhotosPreview_(tr);
 }
 
 function clearKpiEvidence(btnEl) {
   const tr = btnEl.closest("tr");
   if (!tr) return;
+  tr.dataset.evidencePhotosJson = "[]";
   tr.dataset.evidencePhoto = "";
   tr.dataset.evidenceFileName = "";
   const fileInp = tr.querySelector('input[type="file"]');
   if (fileInp) fileInp.value = "";
-  const prevDiv = tr.querySelector(".kpi-photo-preview");
-  if (prevDiv) prevDiv.innerHTML = "";
+  renderKpiPhotosPreview_(tr);
+}
+
+function extractNum_(val) {
+  const m = String(val || "").match(/[-+]?\d*\.?\d+/);
+  return m ? parseFloat(m[0]) : NaN;
 }
 
 function calcRowPct(inputEl) {
   const tr = inputEl.closest("tr");
-  const t = parseFloat(tr.querySelector(".kpi-target").value);
-  const a = parseFloat(tr.querySelector(".kpi-achieved").value);
+  const t = extractNum_(tr.querySelector(".kpi-target").value);
+  const a = extractNum_(tr.querySelector(".kpi-achieved").value);
   const pctInput = tr.querySelector(".kpi-pct");
   const marksInput = tr.querySelector(".kpi-marks");
   const maxMarks = parseFloat(tr.dataset.maxMarks || 0);
 
   if (!isNaN(t) && t > 0 && !isNaN(a)) {
+    const rawPct = Math.round((a / t) * 100);
+    pctInput.value = rawPct + "%";
     const ratio = Math.min(1, Math.max(0, a / t));
-    pctInput.value = Math.round(ratio * 100) + "%";
     if (marksInput && marksInput.type === "number" && maxMarks > 0) {
       marksInput.value = Number((ratio * maxMarks).toFixed(1));
       recalculateTotals();
@@ -1046,7 +1147,8 @@ id: Number(tr.dataset.kpiId),
       pct: tr.querySelector(".kpi-pct").value.trim(),
       marks: tr.querySelector(".kpi-marks").value.trim(),
       evidencePhoto: tr.dataset.evidencePhoto || "",
-      evidenceFileName: tr.dataset.evidenceFileName || ""
+      evidenceFileName: tr.dataset.evidenceFileName || "",
+      evidencePhotos: (() => { try { return JSON.parse(tr.dataset.evidencePhotosJson || "[]"); } catch (e) { return []; } })()
     });
   });
 
@@ -1227,7 +1329,45 @@ async function saveDistrictDirective(e) {
   }
 }
 
-async function loadAuditLogs() {
+async 
+let allDeletedRecords = [];
+
+async function loadDeletedRecords() {
+  if (!currentUser || !currentUser.isAbsoluteAdmin) return;
+  try {
+    const res = await apiRequest({ action: "getDeletedRecords" });
+    if (!res.ok) return;
+    allDeletedRecords = res.deleted || [];
+    renderDeletedRecords();
+  } catch (e) {}
+}
+
+function renderDeletedRecords() {
+  const tbody = document.getElementById("deletedRecordsBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!allDeletedRecords.length) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--text-muted); padding:1.25rem;">${currentLang === "en" ? "No deleted records found." : "कोई हटाया गया रिकॉर्ड नहीं मिला।"}</td></tr>`;
+    return;
+  }
+  allDeletedRecords.forEach(d => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><small>${escHtml(d.deletedAt)}</small></td>
+      <td><strong>${escHtml(d.deletedBy)}</strong></td>
+      <td>${escHtml(d.deletedByRole)}</td>
+      <td><small>${escHtml(d.reportId)}</small></td>
+      <td>${escHtml(d.monthYear)}</td>
+      <td>${escHtml(d.cadreType)}</td>
+      <td>${escHtml(d.cadreName)}</td>
+      <td>${escHtml(d.block)} / ${escHtml(d.clf)}</td>
+      <td><strong>${escHtml(d.totalScore)}</strong> (${escHtml(d.grade || "-")})</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function loadAuditLogs() {
   try {
     const res = await apiRequest({ action: "getAuditLogs" });
     if (!res.ok) return;
@@ -1409,7 +1549,30 @@ const FULL_I18N = {
     allCadresOpt: "All Cadres",
     blockChartTitle: "Block-wise Reports & Average Score",
     gradeChartTitle: "Cadre Performance & Grade Distribution",
-    reportListTitle: "Monthly Cadre Reports"
+    reportListTitle: "Monthly Cadre Reports",
+    thMonth: "Month/Year",
+    thCadre: "Cadre",
+    thNameMobile: "Name / Mobile",
+    thJurisdiction: "Block / CLF / VO",
+    thScore: "Score",
+    thGrade: "Grade",
+    thHonorarium: "Honorarium (₹)",
+    thStatus: "Review Status",
+    thAction: "Action",
+    thSno: "No.",
+    thKpi: "Review Points / Action Indicators (KPIs)",
+    thTarget: "Monthly Target",
+    thAchieved: "Complete Achievement",
+    thPct: "Progress %",
+    thMarks: "Marks (/Max)",
+    thEvidence: "Verification Evidence",
+    uploadPhotosBtn: "📷 Upload Photos",
+    deletedTabTitle: "Deleted Records & Who Deleted Them",
+    refreshBtn: "Refresh",
+    thDeletedAt: "Deleted At",
+    thDeletedBy: "Deleted By",
+    thRole: "Role",
+    thReportId: "Report ID"
   },
   hi: {
     brandTitle: "सीजीएसआरएलएम बिहान — जिला सरगुजा",
@@ -1445,7 +1608,30 @@ const FULL_I18N = {
     allCadresOpt: "सभी कैडर",
     blockChartTitle: "विकासखंडवार प्रतिवेदन एवं औसत अंक",
     gradeChartTitle: "कैडर प्रदर्शन एवं ग्रेड वितरण",
-    reportListTitle: "मासिक कार्य प्रतिवेदन सूची"
+    reportListTitle: "मासिक कार्य प्रतिवेदन सूची",
+    thMonth: "माह/वर्ष",
+    thCadre: "कैडर",
+    thNameMobile: "नाम / मोबाइल",
+    thJurisdiction: "विकासखंड / CLF / VO",
+    thScore: "प्राप्तांक",
+    thGrade: "ग्रेड",
+    thHonorarium: "मानदेय (₹)",
+    thStatus: "समीक्षा स्थिति",
+    thAction: "कार्यवाही",
+    thSno: "क्र.",
+    thKpi: "समीक्षा बिंदु / कार्य संकेतक (KPI)",
+    thTarget: "मासिक लक्ष्य",
+    thAchieved: "पूर्ण उपलब्धि",
+    thPct: "प्रगति %",
+    thMarks: "अधिकतम / प्राप्त अंक",
+    thEvidence: "सत्यापन साक्ष्य",
+    uploadPhotosBtn: "📷 फ़ोटो अपलोड करें",
+    deletedTabTitle: "हटाए गए प्रतिवेदन एवं हटाने वाले का विवरण",
+    refreshBtn: "रिफ्रेश करें",
+    thDeletedAt: "हटाने का समय",
+    thDeletedBy: "किसने हटाया",
+    thRole: "भूमिका",
+    thReportId: "रिपोर्ट आईडी"
   }
 };
 
@@ -1523,7 +1709,8 @@ function applyLanguageUI() {
   if (navBtns[0]) navBtns[0].textContent = t.navDashboard;
   if (navBtns[1]) navBtns[1].textContent = t.navEntry;
   if (navBtns[2]) navBtns[2].textContent = t.navAdmin;
-  if (navBtns[3]) navBtns[3].textContent = t.navSettings;
+  if (navBtns[3]) navBtns[3].textContent = currentLang === "en" ? "🗑️ Deleted Data" : "🗑️ हटाया गया डेटा";
+  if (navBtns[4]) navBtns[4].textContent = t.navSettings;
 
   const statLabels = document.querySelectorAll("#tabDashboard .stat-label");
   if (statLabels[0]) statLabels[0].textContent = t.statTotal;
