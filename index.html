@@ -238,21 +238,21 @@
         <div class="card no-print">
           <div class="form-grid">
             <div class="field" style="margin:0;">
-              <label for="filterMonth">माह व वर्ष (Month-Year)</label>
+              <label for="filterMonth" data-i18n="filterMonthLbl">माह व वर्ष (Month-Year)</label>
               <select id="filterMonth" onchange="renderDashboard()">
-                <option value="ALL">सभी माह (All Months)</option>
+                <option value="ALL" data-i18n="allMonthsOpt">सभी माह (All Months)</option>
               </select>
             </div>
             <div class="field" style="margin:0;" id="filterBlockWrap">
-              <label for="filterBlock">विकासखंड (Block)</label>
+              <label for="filterBlock" data-i18n="filterBlockLbl">विकासखंड (Block)</label>
               <select id="filterBlock" onchange="renderDashboard()">
-                <option value="ALL">सभी 7 विकासखंड (जिला सरगुजा)</option>
+                <option value="ALL" data-i18n="allBlocksOpt">सभी 7 विकासखंड (जिला सरगुजा)</option>
               </select>
             </div>
             <div class="field" style="margin:0;" id="filterCadreWrap">
-              <label for="filterCadre">कैडर प्रकार (Cadre)</label>
+              <label for="filterCadre" data-i18n="filterCadreLbl">कैडर प्रकार (Cadre)</label>
               <select id="filterCadre" onchange="renderDashboard()">
-                <option value="ALL">सभी 10 कैडर प्रारूप</option>
+                <option value="ALL" data-i18n="allCadresOpt">सभी कैडर प्रारूप</option>
               </select>
             </div>
             <div class="field" style="margin:0; display:flex; align-items:flex-end; gap:0.5rem; flex-wrap:wrap;">
@@ -290,19 +290,19 @@
         <!-- Interactive Charts (Shown prominently for DMMU, Zilla CEO, Developer & Block/CLF reviewers) -->
         <div id="analyticsChartsSection" class="chart-grid">
           <div class="chart-box">
-            <div class="card-title" style="margin-bottom: 0.6rem;">विकासखंडवार प्रतिवेदन एवं औसत स्कोर (Block-wise)</div>
-            <canvas id="blockChart"></canvas>
+            <div class="card-title" style="margin-bottom: 0.6rem;" data-i18n="blockChartTitle">विकासखंडवार प्रतिवेदन एवं औसत स्कोर</div>
+            <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="blockChart"></canvas></div>
           </div>
           <div class="chart-box">
-            <div class="card-title" style="margin-bottom: 0.6rem;">कैडरवार प्रदर्शन एवं ग्रेड वितरण (Cadre & Grade Mix)</div>
-            <canvas id="gradeChart"></canvas>
+            <div class="card-title" style="margin-bottom: 0.6rem;" data-i18n="gradeChartTitle">कैडरवार प्रदर्शन एवं ग्रेड वितरण</div>
+            <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="gradeChart"></canvas></div>
           </div>
         </div>
 
         <!-- Reports List & Actions -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">मासिक कार्य प्रतिवेदन सूची (भाग-2 व भाग-3 समेकित रिकॉर्ड)</div>
+            <div class="card-title" data-i18n="reportListTitle">मासिक कार्य प्रतिवेदन सूची</div>
             <span style="font-size: 0.78rem; color: var(--text-muted);" id="accessScopeNote"></span>
           </div>
           <div class="table-wrap">

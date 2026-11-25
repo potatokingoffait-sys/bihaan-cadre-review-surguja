@@ -598,7 +598,8 @@ async function syncData() {
     const data = await apiRequest({ action: "getDashboardData", filters: {} });
     if (!data.ok) {
       if (String(data.error || "").includes("RELOGIN_REQUIRED") || String(data.error || "").includes("NEW_DEVICE_DETECTED") || String(data.error || "").includes("SESSION")) {
-        showAlert("globalAlert", "Session verification notice: " + data.error, "danger");
+        localStorage.removeItem(STORAGE_KEYS.TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
         return;
       }
       showAlert("globalAlert", data.error, "danger");
@@ -743,8 +744,8 @@ function renderCharts(list) {
     data: {
       labels: blockLabels,
       datasets: [
-        { label: "जमा प्रतिवेदन संख्या", data: hasAnyBlockData ? blockCounts : [0,0,0,0,0,0,0,0], backgroundColor: "#22c55e" },
-        { label: "औसत प्राप्तांक (/100)", data: hasAnyBlockData ? blockAvgScores : [0,0,0,0,0,0,0,0], backgroundColor: "#f59e0b" }
+        { label: currentLang === "en" ? "Reports Submitted" : "जमा प्रतिवेदन संख्या", data: hasAnyBlockData ? blockCounts : [0,0,0,0,0,0,0,0], backgroundColor: "#22c55e" },
+        { label: currentLang === "en" ? "Avg Score (/100)" : "औसत अंक (/100)", data: hasAnyBlockData ? blockAvgScores : [0,0,0,0,0,0,0,0], backgroundColor: "#f59e0b" }
       ]
     },
     options: {
@@ -771,8 +772,8 @@ function renderCharts(list) {
     type: "doughnut",
     data: {
       labels: totalGrades > 0
-        ? ["ग्रेड A (80-100)", "ग्रेड B (60-79)", "ग्रेड C (40-59)", "ग्रेड D (<40)"]
-        : ["कोई ग्रेड डेटा नहीं (No Data Yet)"],
+        ? (currentLang === "en" ? ["Grade A (80-100)", "Grade B (60-79)", "Grade C (40-59)", "Grade D (<40)"] : ["ग्रेड ए (80-100)", "ग्रेड बी (60-79)", "ग्रेड सी (40-59)", "ग्रेड डी (<40)"])
+        : (currentLang === "en" ? ["No Grade Data Yet"] : ["कोई ग्रेड डेटा नहीं"]),
       datasets: [{
         data: totalGrades > 0 ? [gA, gB, gC, gD] : [1],
         backgroundColor: totalGrades > 0 ? ["#16a34a", "#2563eb", "#f59e0b", "#dc2626"] : ["#334155"]
@@ -781,8 +782,10 @@ function renderCharts(list) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      cutout: "62%",
+      radius: "82%",
       plugins: {
-        legend: { labels: { color: textColor } }
+        legend: { position: "top", labels: { color: textColor, boxWidth: 14, font: { size: 11 } } }
       }
     }
   });
@@ -1316,7 +1319,16 @@ const FULL_I18N = {
     statHon: "Recommended Honorarium (₹)",
     cadreScopeNote: "Cadre View: Grade only (marks & honorarium hidden). Dashboard & your report entries shown.",
     otherScopeNote: "Jurisdiction View: Scoped data & review access.",
-    adminScopeNote: "District & Above Full Access: Marks, Grades, Analytics, Edit/Delete & Google Sheet."
+    adminScopeNote: "District & Above Full Access: Marks, Grades, Analytics, Edit/Delete & Google Sheet.",
+    filterMonthLbl: "Month & Year",
+    filterBlockLbl: "Block",
+    filterCadreLbl: "Cadre Type",
+    allMonthsOpt: "All Months",
+    allBlocksOpt: "All Blocks (Surguja)",
+    allCadresOpt: "All Cadres",
+    blockChartTitle: "Block-wise Reports & Average Score",
+    gradeChartTitle: "Cadre Performance & Grade Distribution",
+    reportListTitle: "Monthly Cadre Reports"
   },
   hi: {
     brandTitle: "सीजीएसआरएलएम बिहान — जिला सरगुजा",
@@ -1343,7 +1355,16 @@ const FULL_I18N = {
     statHon: "अनुशंसित मानदेय (₹)",
     cadreScopeNote: "कैडर दृश्य: केवल ग्रेड दिखता है (अंक व मानदेय छिपे हैं)। डैशबोर्ड व आपके भरने योग्य विवरण उपलब्ध हैं।",
     otherScopeNote: "कार्यक्षेत्र दृश्य: सीमित डेटा एवं समीक्षा पहुँच।",
-    adminScopeNote: "जिला एवं उच्च स्तर: अंक, ग्रेड, डैशबोर्ड, संशोधन/हटाने व गूगल शीट पहुँच।"
+    adminScopeNote: "जिला एवं उच्च स्तर: अंक, ग्रेड, डैशबोर्ड, संशोधन/हटाने व गूगल शीट पहुँच।",
+    filterMonthLbl: "माह व वर्ष",
+    filterBlockLbl: "विकासखंड",
+    filterCadreLbl: "कैडर प्रकार",
+    allMonthsOpt: "सभी माह",
+    allBlocksOpt: "सभी विकासखंड (सरगुजा)",
+    allCadresOpt: "सभी कैडर",
+    blockChartTitle: "विकासखंडवार प्रतिवेदन एवं औसत अंक",
+    gradeChartTitle: "कैडर प्रदर्शन एवं ग्रेड वितरण",
+    reportListTitle: "मासिक कार्य प्रतिवेदन सूची"
   }
 };
 

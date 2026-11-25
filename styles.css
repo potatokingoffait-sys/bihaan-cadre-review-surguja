@@ -432,7 +432,11 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem;
-  min-height: 290px;
+  height: 275px;
+  max-height: 275px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Tables */
