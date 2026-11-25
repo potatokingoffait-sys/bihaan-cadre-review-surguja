@@ -214,11 +214,7 @@ function saveGasUrl() {
 async function apiRequest(payload) {
   const gasUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL);
   if (!gasUrl) {
-    const box = document.getElementById("loginGasSetupBox");
-    const inp = document.getElementById("loginGasUrlInput");
-    if (box) box.classList.remove("hidden");
-    if (inp && !inp.value) inp.value = localStorage.getItem(STORAGE_KEYS.GAS_URL) || "";
-    throw new Error("Backend URL not configured yet. Paste your Google Apps Script /exec URL below and click Save Backend URL.");
+    throw new Error("Google Apps Script URL is not set in this browser yet.");
   }
   const fp = await getDeviceFingerprint();
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN) || "";
@@ -270,6 +266,35 @@ async function handleLoginSubmit(e) {
       await enterPortal(false, true);
     }
   } catch (err) {
+    if (String(err && err.message || "").includes("URL is not set")) {
+      const entered = window.prompt("Enter your Google Apps Script Web App URL (/exec):");
+      if (entered && entered.trim()) {
+        localStorage.setItem(STORAGE_KEYS.GAS_URL, entered.trim());
+        try {
+          const loginId = document.getElementById("loginIdInput").value.trim();
+          const password = document.getElementById("loginPassInput").value;
+          const retryData = await apiRequest({ action: "login", loginId, password });
+          if (retryData && retryData.ok) {
+            localStorage.setItem(STORAGE_KEYS.TOKEN, retryData.token);
+            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(retryData.user));
+            realAuthenticatedUser = retryData.user;
+            currentUser = retryData.user;
+            devPreviewState = { active: false, role: "DEVELOPER", cadreType: "RBK", block: "अंबिकापुर (Ambikapur)", targetUserId: "" };
+            document.getElementById("authScreen").classList.add("hidden");
+            document.getElementById("unlockScreen").classList.add("hidden");
+            document.getElementById("appShell").classList.remove("hidden");
+            await enterPortal(false, true);
+            return;
+          } else {
+            showAlert("authAlert", (retryData && retryData.error) || "Invalid Login ID or Password.", "danger");
+            return;
+          }
+        } catch (retryErr) {
+          showAlert("authAlert", retryErr.message || "Login failed.", "danger");
+          return;
+        }
+      }
+    }
     showAlert("authAlert", err.message || "Connection error during login.", "danger");
   } finally {
     btn.disabled = false;
