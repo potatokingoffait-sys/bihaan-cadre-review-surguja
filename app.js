@@ -260,7 +260,7 @@ async function handleLoginSubmit(e) {
       realAuthenticatedUser = data.user;
       currentUser = data.user;
       devPreviewState = { active: false, role: "DEVELOPER", cadreType: "RBK", block: "अंबिकापुर (Ambikapur)", targetUserId: "" };
-      enterPortal();
+      await enterPortal(false, true);
     }
   } catch (err) {
     showAlert("authAlert", err.message, "danger");
@@ -480,7 +480,7 @@ function showAuthScreen() {
 // ==========================================================================
 // MAIN PORTAL INITIALIZATION & ROLE-BASED ACCESS ENFORCEMENT
 // ==========================================================================
-async function enterPortal(skipSync = false) {
+async function enterPortal(skipSync = false, freshLogin = false) {
   if (!realAuthenticatedUser) realAuthenticatedUser = currentUser;
   document.getElementById("authScreen").classList.add("hidden");
   document.getElementById("unlockScreen").classList.add("hidden");
@@ -1261,6 +1261,71 @@ async function resetDevPerspective() {
 
 let currentLang = localStorage.getItem("bihaan_surguja_lang") || "en";
 
+const FULL_I18N = {
+  en: {
+    brandTitle: "CGSRLM Bihan — District Surguja",
+    brandSub: "Monthly Cadre Review & Monitoring Portal",
+    loginTab: "Login",
+    registerTab: "Register",
+    loginIdLabel: "Login ID or Mobile Number",
+    passwordLabel: "Password",
+    signInBtn: "Sign In",
+    loginHint: "Password required on new devices • Quick unlock with PIN or fingerprint after first sign-in",
+    sync: "🔄 Sync",
+    lock: "🔒 Lock",
+    navDashboard: "📊 Dashboard",
+    navEntry: "📝 Monthly Report",
+    navAdmin: "🛡️ Admin & Users",
+    navSettings: "⚙️ Settings",
+    clearFilter: "✕ Remove Filter",
+    printPdf: "🖨️ Print / PDF",
+    saveBtn: "💾 Save",
+    statTotal: "Total Reports",
+    statAvg: "Avg Score (/100)",
+    statGradeA: "Grade-A Cadres",
+    statGradeCD: "Grade-C/D Cadres",
+    statHon: "Recommended Honorarium (₹)",
+    cadreScopeNote: "Cadre View: Grade only (marks & honorarium hidden). Dashboard & your report entries shown.",
+    otherScopeNote: "Jurisdiction View: Scoped data & review access.",
+    adminScopeNote: "District & Above Full Access: Marks, Grades, Analytics, Edit/Delete & Google Sheet."
+  },
+  hi: {
+    brandTitle: "सीजीएसआरएलएम बिहान — जिला सरगुजा",
+    brandSub: "मासिक कैडर समीक्षा एवं अनुश्रवण पोर्टल",
+    loginTab: "लॉगिन",
+    registerTab: "पंजीकरण",
+    loginIdLabel: "लॉगिन आईडी या मोबाइल नंबर",
+    passwordLabel: "पासवर्ड",
+    signInBtn: "लॉगिन करें",
+    loginHint: "नए डिवाइस पर पासवर्ड अनिवार्य • पहली बार लॉगिन के बाद पिन या फिंगरप्रिंट से अनलॉक करें",
+    sync: "🔄 सिंक",
+    lock: "🔒 लॉक",
+    navDashboard: "📊 डैशबोर्ड",
+    navEntry: "📝 मासिक प्रतिवेदन",
+    navAdmin: "🛡️ एडमिन व यूज़र",
+    navSettings: "⚙️ सेटिंग्स",
+    clearFilter: "✕ फ़िल्टर हटाएं",
+    printPdf: "🖨️ प्रिंट / पीडीएफ",
+    saveBtn: "💾 सहेजें",
+    statTotal: "कुल प्रतिवेदन",
+    statAvg: "औसत अंक (/100)",
+    statGradeA: "ग्रेड-ए कैडर",
+    statGradeCD: "ग्रेड-सी/डी कैडर",
+    statHon: "अनुशंसित मानदेय (₹)",
+    cadreScopeNote: "कैडर दृश्य: केवल ग्रेड दिखता है (अंक व मानदेय छिपे हैं)। डैशबोर्ड व आपके भरने योग्य विवरण उपलब्ध हैं।",
+    otherScopeNote: "कार्यक्षेत्र दृश्य: सीमित डेटा एवं समीक्षा पहुँच।",
+    adminScopeNote: "जिला एवं उच्च स्तर: अंक, ग्रेड, डैशबोर्ड, संशोधन/हटाने व गूगल शीट पहुँच।"
+  }
+};
+
+function translateDomElements() {
+  const dict = FULL_I18N[currentLang] || FULL_I18N.en;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key]) el.textContent = dict[key];
+  });
+}
+
 const I18N = {
   en: {
     brandTitle: "CGSRLM Bihan — District Surguja",
@@ -1315,6 +1380,7 @@ function toggleLanguage() {
 function applyLanguageUI() {
   const t = I18N[currentLang] || I18N.en;
   const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  translateDomElements();
   setTxt("authBrandTitle", t.brandTitle);
   setTxt("authBrandSub", t.brandSub);
   setTxt("syncBtn", t.sync);

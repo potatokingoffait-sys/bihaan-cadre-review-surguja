@@ -1,4 +1,4 @@
-// CGSRLM Bihaan Surguja - Immediate-update service worker (no stale HTML/JS cache trap)
+// CGSRLM Bihaan Surguja v7 - Immediate-update service worker
 self.addEventListener("install", event => {
   self.skipWaiting();
 });

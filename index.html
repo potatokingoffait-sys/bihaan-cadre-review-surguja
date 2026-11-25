@@ -34,8 +34,8 @@
       </div>
 
       <div class="auth-tabs">
-        <button id="tabLoginBtn" class="auth-tab active" type="button" onclick="switchAuthTab('login')">लॉगिन (Sign In)</button>
-        <button id="tabRegisterBtn" class="auth-tab" type="button" onclick="switchAuthTab('register')">नया पंजीकरण (Sign Up)</button>
+        <button id="tabLoginBtn" class="auth-tab active" type="button" data-i18n="loginTab" onclick="switchAuthTab('login')">Login</button>
+        <button id="tabRegisterBtn" class="auth-tab" type="button" data-i18n="registerTab" onclick="switchAuthTab('register')">Register</button>
       </div>
 
       <div id="authAlert" class="alert hidden"></div>
@@ -43,20 +43,20 @@
       <!-- UNIFIED SINGLE LOGIN BOX (Auto-categorizes Department, Cadre/Others, or Developer) -->
       <form id="loginForm" onsubmit="handleLoginSubmit(event)">
         <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.9rem;">
-          एक ही लॉगिन बॉक्स — सिस्टम आपकी आईडी के आधार पर स्वतः श्रेणी (विभाग / कैडर / डेवलपर) और अधिकार तय करेगा।
+          Single login box — automatically detects Department, Cadre/Others, or Developer from your ID.
         </p>
         <div class="field">
-          <label for="loginIdInput">लॉगिन आईडी या मोबाइल नंबर (Login ID / Mobile)</label>
+          <label for="loginIdInput" data-i18n="loginIdLabel">Login ID or Mobile Number</label>
           <input id="loginIdInput" type="text" required autocomplete="username" placeholder="जैसे: DMMU_SURGUJA या कैडर कोड / मोबाइल" />
         </div>
         <div class="field">
-          <label for="loginPassInput">पासवर्ड (Password)</label>
+          <label for="loginPassInput" data-i18n="passwordLabel">Password</label>
           <input id="loginPassInput" type="password" required autocomplete="current-password" placeholder="••••••••" />
         </div>
-        <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn">सुरक्षित लॉगिन करें (Sign In)</button>
+        <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn" data-i18n="signInBtn">Sign In</button>
 
         <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--border); text-align: center; font-size: 0.78rem; color: var(--text-muted);">
-          <span>नए डिवाइस पर पासवर्ड अनिवार्य • एक बार लॉगिन के बाद PIN / फिंगरप्रिंट से त्वरित अनलॉक</span>
+          <span data-i18n="loginHint">Password required on new devices • Quick unlock with PIN or fingerprint after first sign-in</span>
         </div>
       </form>
 
