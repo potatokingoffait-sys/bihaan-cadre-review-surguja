@@ -856,9 +856,14 @@ function buildDynamicKpiForm(existingData = null) {
       const pctVal = savedKpi ? savedKpi.pct : "";
       const marksVal = savedKpi ? savedKpi.marks : "";
 
+      const savedPhoto = savedKpi && savedKpi.evidencePhoto ? savedKpi.evidencePhoto : "";
+      const savedPhotoName = savedKpi && savedKpi.evidenceFileName ? savedKpi.evidenceFileName : "";
+
       const tr = document.createElement("tr");
       tr.dataset.kpiId = kpi.id;
       tr.dataset.maxMarks = kpi.maxMarks || 0;
+      tr.dataset.evidencePhoto = savedPhoto;
+      tr.dataset.evidenceFileName = savedPhotoName;
 
       const marksCell = schema.hasScoring
         ? `<div style="display:flex; align-items:center; gap:4px;">
@@ -869,6 +874,14 @@ function buildDynamicKpiForm(existingData = null) {
            </div>`
         : `<input type="text" class="kpi-marks" value="${escHtml(marksVal)}" placeholder="पूर्ण/प्रगतिशील" style="padding:4px;" />`;
 
+      const photoPreviewHtml = savedPhoto
+        ? `<div class="kpi-photo-preview" style="margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+             <img src="${savedPhoto}" alt="Evidence" style="width:42px; height:42px; object-fit:cover; border-radius:6px; border:1px solid var(--border);" />
+             <span style="font-size:0.72rem; color:var(--primary); word-break:break-all;">${escHtml(savedPhotoName || "Photo attached")}</span>
+             <button type="button" class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:0.7rem;" onclick="clearKpiEvidence(this)">✕</button>
+           </div>`
+        : `<div class="kpi-photo-preview" style="margin-top:4px;"></div>`;
+
       tr.innerHTML = `
         <td>${kpi.id}</td>
         <td>${escHtml(kpi.text)}</td>
@@ -876,7 +889,14 @@ function buildDynamicKpiForm(existingData = null) {
         <td><input type="text" class="kpi-achieved" value="${escHtml(achievedVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
         <td><input type="text" class="kpi-pct" readonly value="${escHtml(pctVal)}" style="padding:4px; background:var(--surface-2);" /></td>
         <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
-        <td><small style="color:var(--text-muted);">${escHtml(kpi.evidence)}</small></td>
+        <td>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">${escHtml(kpi.evidence)}</div>
+          <label class="btn btn-outline btn-sm" style="padding:3px 8px; font-size:0.72rem; margin:0; cursor:pointer; display:inline-flex;">
+            📷 Upload Photo
+            <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" style="display:none;" onchange="handleKpiEvidenceUpload(this)" />
+          </label>
+          ${photoPreviewHtml}
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -899,15 +919,74 @@ function buildDynamicKpiForm(existingData = null) {
   recalculateTotals();
 }
 
+
+function handleKpiEvidenceUpload(fileInput) {
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  const tr = fileInput.closest("tr");
+  if (!tr) return;
+
+  if (file.size > 2 * 1024 * 1024) {
+    showAlert("globalAlert", "Please select an image/file under 2 MB for fast sync.", "danger");
+    fileInput.value = "";
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(evt) {
+    const dataUrl = evt.target && evt.target.result ? String(evt.target.result) : "";
+    tr.dataset.evidencePhoto = dataUrl;
+    tr.dataset.evidenceFileName = file.name;
+
+    const prevDiv = tr.querySelector(".kpi-photo-preview");
+    if (prevDiv) {
+      const thumb = file.type.startsWith("image/")
+        ? `<img src="${dataUrl}" alt="${escHtml(file.name)}" style="width:42px; height:42px; object-fit:cover; border-radius:6px; border:1px solid var(--border);" />`
+        : `<span style="font-size:0.72rem; padding:2px 6px; border-radius:4px; background:var(--surface-2);">📄</span>`;
+      prevDiv.innerHTML = `
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:2px;">
+          ${thumb}
+          <span style="font-size:0.72rem; color:var(--primary); word-break:break-all;">${escHtml(file.name)}</span>
+          <button type="button" class="btn btn-danger btn-sm" style="padding:2px 6px; font-size:0.7rem;" onclick="clearKpiEvidence(this)">✕</button>
+        </div>
+      `;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearKpiEvidence(btnEl) {
+  const tr = btnEl.closest("tr");
+  if (!tr) return;
+  tr.dataset.evidencePhoto = "";
+  tr.dataset.evidenceFileName = "";
+  const fileInp = tr.querySelector('input[type="file"]');
+  if (fileInp) fileInp.value = "";
+  const prevDiv = tr.querySelector(".kpi-photo-preview");
+  if (prevDiv) prevDiv.innerHTML = "";
+}
+
 function calcRowPct(inputEl) {
   const tr = inputEl.closest("tr");
   const t = parseFloat(tr.querySelector(".kpi-target").value);
   const a = parseFloat(tr.querySelector(".kpi-achieved").value);
   const pctInput = tr.querySelector(".kpi-pct");
+  const marksInput = tr.querySelector(".kpi-marks");
+  const maxMarks = parseFloat(tr.dataset.maxMarks || 0);
+
   if (!isNaN(t) && t > 0 && !isNaN(a)) {
-    pctInput.value = Math.min(100, Math.round((a / t) * 100)) + "%";
+    const ratio = Math.min(1, Math.max(0, a / t));
+    pctInput.value = Math.round(ratio * 100) + "%";
+    if (marksInput && marksInput.type === "number" && maxMarks > 0) {
+      marksInput.value = Number((ratio * maxMarks).toFixed(1));
+      recalculateTotals();
+    }
   } else {
     pctInput.value = "";
+    if (marksInput && marksInput.type === "number" && maxMarks > 0) {
+      marksInput.value = "";
+      recalculateTotals();
+    }
   }
 }
 
@@ -961,11 +1040,13 @@ async function submitMonthlyReport(e) {
   const kpis = [];
   document.querySelectorAll("#dynamicKpiBody tr[data-kpi-id]").forEach(tr => {
     kpis.push({
-      id: Number(tr.dataset.kpiId),
+id: Number(tr.dataset.kpiId),
       target: tr.querySelector(".kpi-target").value.trim(),
       achieved: tr.querySelector(".kpi-achieved").value.trim(),
       pct: tr.querySelector(".kpi-pct").value.trim(),
-      marks: tr.querySelector(".kpi-marks").value.trim()
+      marks: tr.querySelector(".kpi-marks").value.trim(),
+      evidencePhoto: tr.dataset.evidencePhoto || "",
+      evidenceFileName: tr.dataset.evidenceFileName || ""
     });
   });
 
