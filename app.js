@@ -826,6 +826,18 @@ function resetReportForm() {
   document.getElementById("formCadreRemarks").value = "";
   document.getElementById("formReviewerRemarks").value = "";
   document.getElementById("formHonorarium").value = "0";
+
+  const isCadre = !!(currentUser && currentUser.role === "CADRE");
+  ["formBlock", "formClf", "formVo", "formGp", "formCadreName", "formMobile", "formAllocVo", "formAllocShg"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.tagName === "SELECT") {
+      el.disabled = isCadre;
+    } else {
+      el.readOnly = isCadre;
+    }
+  });
+
   buildDynamicKpiForm();
 }
 
@@ -907,7 +919,8 @@ function buildDynamicKpiForm(existingData = null) {
       tr.innerHTML = `
         <td>${kpi.id}</td>
         <td>${escHtml(kpi.text)}</td>
-        <td><input type="text" class="kpi-target" value="${escHtml(targetVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
+        <td><input type="text" class="kpi-target" value="${escHtml(targetVal)}" oninput="calcRowPct(this)"
+  ${(currentUser && currentUser.isAbsoluteAdmin) ? 'style="padding:4px;"' : 'readonly tabindex="-1" title="Target is set by DMMU and above" style="padding:4px; background:var(--surface-2); pointer-events:none; cursor:default;"'} /></td>
         <td><input type="text" class="kpi-achieved" value="${escHtml(achievedVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
         <td><input type="text" class="kpi-pct" readonly tabindex="-1" value="${escHtml(pctVal)}" style="padding:4px; background:var(--surface-2); pointer-events:none; cursor:default;" /></td>
         <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
