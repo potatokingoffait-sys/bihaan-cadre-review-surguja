@@ -44,13 +44,7 @@ async function getDeviceFingerprint() {
     stored = Array.from(rand).map(b => b.toString(16).padStart(2, "0")).join("");
     localStorage.setItem(STORAGE_KEYS.DEVICE_FP, stored);
   }
-  const raw = [
-    stored,
-    navigator.userAgent,
-    navigator.language,
-    screen.width + "x" + screen.height,
-    Intl.DateTimeFormat().resolvedOptions().timeZone || ""
-  ].join("|");
+  const raw = [stored, navigator.platform || "", (navigator.userAgent || "").slice(0, 80)].join("|");
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(raw));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
@@ -313,7 +307,7 @@ async function verifySessionAndEnter() {
       return;
     }
     const data = await apiRequest({ action: "verifySession" });
-    if (data.ok) {
+    if (data.ok && data.user) {
       realAuthenticatedUser = data.user;
       if (!devPreviewState.active) {
         currentUser = data.user;
@@ -321,11 +315,11 @@ async function verifySessionAndEnter() {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user));
       enterPortal();
     } else {
-      // New device detected or session expired -> force fresh Sign In
+      // Cleanly clear stale token and show login screen without glitch banners
       localStorage.removeItem(STORAGE_KEYS.TOKEN);
       localStorage.removeItem(STORAGE_KEYS.USER);
+      currentUser = null;
       showAuthScreen();
-      showAlert("authAlert", data.error || "कृपया पुनः लॉगिन करें।", "danger");
     }
   } catch (err) {
     if (currentUser) enterPortal();
@@ -571,12 +565,11 @@ async function syncData() {
     await flushOfflineQueue();
     const data = await apiRequest({ action: "getDashboardData", filters: {} });
     if (!data.ok) {
-      if (String(data.error || "").includes("RELOGIN_REQUIRED") || String(data.error || "").includes("NEW_DEVICE_DETECTED")) {
+      if (String(data.error || "").includes("RELOGIN_REQUIRED") || String(data.error || "").includes("NEW_DEVICE_DETECTED") || String(data.error || "").includes("SESSION")) {
         localStorage.removeItem(STORAGE_KEYS.TOKEN);
         localStorage.removeItem(STORAGE_KEYS.USER);
         currentUser = null;
         showAuthScreen();
-        showAlert("authAlert", data.error, "danger");
         return;
       }
       showAlert("globalAlert", data.error, "danger");
