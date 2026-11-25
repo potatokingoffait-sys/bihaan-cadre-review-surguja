@@ -90,10 +90,8 @@ window.addEventListener("DOMContentLoaded", async () => {
   registerServiceWorker();
   populateStaticDropdowns();
 
-  const savedUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL) || "";
-  if (savedUrl) {
-    document.getElementById("gasUrlInput").value = savedUrl;
-  }
+  // Precompute device fingerprint once at startup for fast login & PIN unlock
+  await getDeviceFingerprint();
 
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
   const savedUserStr = localStorage.getItem(STORAGE_KEYS.USER);
@@ -221,7 +219,7 @@ function saveGasUrl() {
 async function apiRequest(payload) {
   const gasUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL);
   if (!gasUrl) {
-    throw new Error("कृपया पहले 'API सेटिंग' में Google Apps Script Web App URL दर्ज करें।");
+    throw new Error("Google Apps Script Web App URL सेट नहीं है। कृपया Settings में URL दर्ज करें या Deploy करें।");
   }
   const fp = await getDeviceFingerprint();
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN) || "";
@@ -385,7 +383,12 @@ async function verifyPinAndUnlock() {
   const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
   if (hex === savedHash) {
     hideAlert("unlockAlert");
-    await verifySessionAndEnter();
+    if (currentUser) {
+      enterPortal();
+      verifySessionAndEnter();
+    } else {
+      await verifySessionAndEnter();
+    }
   } else {
     pinBuffer = "";
     updatePinDots();
@@ -551,6 +554,14 @@ async function syncData() {
     await flushOfflineQueue();
     const data = await apiRequest({ action: "getDashboardData", filters: {} });
     if (!data.ok) {
+      if (String(data.error || "").includes("RELOGIN_REQUIRED") || String(data.error || "").includes("NEW_DEVICE_DETECTED")) {
+        localStorage.removeItem(STORAGE_KEYS.TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
+        currentUser = null;
+        showAuthScreen();
+        showAlert("authAlert", data.error, "danger");
+        return;
+      }
       showAlert("globalAlert", data.error, "danger");
       return;
     }
