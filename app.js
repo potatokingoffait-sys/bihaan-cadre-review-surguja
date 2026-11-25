@@ -909,7 +909,7 @@ function buildDynamicKpiForm(existingData = null) {
         <td>${escHtml(kpi.text)}</td>
         <td><input type="text" class="kpi-target" value="${escHtml(targetVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
         <td><input type="text" class="kpi-achieved" value="${escHtml(achievedVal)}" oninput="calcRowPct(this)" style="padding:4px;" /></td>
-        <td><input type="text" class="kpi-pct" readonly value="${escHtml(pctVal)}" style="padding:4px; background:var(--surface-2);" /></td>
+        <td><input type="text" class="kpi-pct" readonly tabindex="-1" value="${escHtml(pctVal)}" style="padding:4px; background:var(--surface-2); pointer-events:none; cursor:default;" /></td>
         <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
         <td>
           <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">${escHtml(kpi.evidence)}</div>
@@ -1068,8 +1068,10 @@ function extractNum_(val) {
 
 function calcRowPct(inputEl) {
   const tr = inputEl.closest("tr");
-  const t = extractNum_(tr.querySelector(".kpi-target").value);
-  const a = extractNum_(tr.querySelector(".kpi-achieved").value);
+  const tRaw = tr.querySelector(".kpi-target").value.trim();
+  const aRaw = tr.querySelector(".kpi-achieved").value.trim();
+  const t = extractNum_(tRaw);
+  const a = extractNum_(aRaw);
   const pctInput = tr.querySelector(".kpi-pct");
   const marksInput = tr.querySelector(".kpi-marks");
   const maxMarks = parseFloat(tr.dataset.maxMarks || 0);
@@ -1082,6 +1084,8 @@ function calcRowPct(inputEl) {
       marksInput.value = Number((ratio * maxMarks).toFixed(1));
       recalculateTotals();
     }
+  } else if (aRaw && ["completed", "complete", "done", "yes", "पूर्ण", "हाँ", "मासिक", "वार्षिक"].includes(aRaw.toLowerCase()) || (tRaw && aRaw && tRaw.toLowerCase() === aRaw.toLowerCase())) {
+    pctInput.value = "100%";
   } else {
     pctInput.value = "";
     if (marksInput && marksInput.type === "number" && maxMarks > 0) {
