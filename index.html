@@ -260,7 +260,7 @@
             <div class="field" style="margin:0; display:flex; align-items:flex-end; gap:0.5rem; flex-wrap:wrap;">
               <button type="button" class="btn btn-outline btn-sm" id="clearFilterBtn" onclick="clearAllFilters()">✕ Remove Filter</button>
               <button type="button" class="btn btn-outline btn-sm" id="printPdfBtn" onclick="window.print()">🖨️ Print / PDF</button>
-              <a id="gsheetDirectLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm hidden">📗 Google Sheet</a>
+              <a id="gsheetDirectLink" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm hidden" onclick="return openMasterSheetGuard(event, this)">📗 Google Sheet</a>
             </div>
           </div>
         </div>
@@ -688,7 +688,7 @@
           <!-- Display & Theme Settings -->
           <div class="card">
             <div class="card-header">
-              <div class="card-title">🎨 डिस्प्ले एवं थीम मोड (Appearance Settings)</div>
+              <div class="card-title" data-i18n="setThemeTitle">🎨 Appearance & Theme Settings</div>
             </div>
             <div class="field" style="text-align: left;">
               <label for="themeSelect">ऐप थीम चुनें (Default: फ़ोन सिस्टम मोड)</label>
@@ -707,7 +707,7 @@
           <!-- Biometric & PIN Device Lock Settings -->
           <div class="card">
             <div class="card-header">
-              <div class="card-title">🔐 फिंगरप्रिंट एवं PIN लॉक (Device Quick Security)</div>
+              <div class="card-title" data-i18n="setPinTitle">🔐 Fingerprint & PIN Device Lock</div>
             </div>
             <div class="field" style="text-align: left;">
               <label for="newPinInput">4-अंकों का नया PIN सेट / बदलें</label>
@@ -724,8 +724,8 @@
         <!-- Account Info & Password Change -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">👤 खाता विवरण एवं पासवर्ड प्रबंधन (Account & Credentials)</div>
-            <button type="button" class="btn btn-danger btn-sm" onclick="logoutUser()">इस डिवाइस से लॉगआउट करें</button>
+            <div class="card-title" data-i18n="setAccountTitle">👤 Account Details & Password</div>
+            <button type="button" class="btn btn-danger btn-sm" data-i18n="logoutBtn" onclick="logoutUser()">Logout from Device</button>
           </div>
           <form onsubmit="updateAccountSettings(event)">
             <div class="form-grid">
@@ -754,26 +754,38 @@
                 <input id="setNewPassword" type="password" minlength="6" placeholder="खाली छोड़ें यदि नहीं बदलना है" />
               </div>
             </div>
-            <button type="submit" class="btn btn-primary">प्रोफ़ाइल व पासवर्ड अपडेट करें</button>
+            <button type="submit" class="btn btn-primary" data-i18n="updateProfileBtn">Update Profile & Password</button>
           </form>
         </div>
 
         <!-- Absolute Admin Only: Backend Connection & GSheet Link -->
         <div id="adminSystemSettingsCard" class="card hidden">
           <div class="card-header">
-            <div class="card-title">🛠️ सिस्टम एवं Google Sheet नियंत्रण (DMMU / Zilla CEO / Developer Only)</div>
+            <div class="card-title" data-i18n="setSystemTitle">🛠️ System & Google Sheet Controls (Admin Only)</div>
           </div>
           <div class="field" style="text-align: left;">
             <label for="adminGasUrl">Google Apps Script API Endpoint URL</label>
             <input id="adminGasUrl" type="url" />
           </div>
           <div style="display: flex; gap: 0.65rem; flex-wrap: wrap;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="saveAdminGasUrl()">API URL अपडेट करें</button>
-            <a id="adminGsheetBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">मास्टर Google Sheet खोलें</a>
+            <button type="button" class="btn btn-primary btn-sm" data-i18n="updateApiBtn" onclick="saveAdminGasUrl()">Update API URL</button>
+            <a id="adminGsheetBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm" data-i18n="openMasterSheetBtn" onclick="return openMasterSheetGuard(event, this)">Open Master Google Sheet</a>
           </div>
         </div>
       </section>
     </main>
+  </div>
+
+
+  <!-- EVIDENCE PHOTO VIEWER MODAL (For District Admin / Reviewers) -->
+  <div id="photoViewerModal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.78); z-index:999; display:flex; align-items:center; justify-content:center; padding:1rem;">
+    <div class="card" style="width:100%; max-width:780px; max-height:88vh; overflow-y:auto; margin:0;">
+      <div class="card-header">
+        <div class="card-title" id="photoModalTitle">Uploaded Verification Evidence Photos</div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="closePhotoModal()">✕ Close</button>
+      </div>
+      <div id="photoModalBody" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:0.85rem;"></div>
+    </div>
   </div>
 
 </body>

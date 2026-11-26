@@ -579,6 +579,13 @@ async function enterPortal(skipSync = false, freshLogin = false) {
   document.getElementById("setFullName").value = currentUser.fullName;
   document.getElementById("setMobile").value = currentUser.mobile || "";
   document.getElementById("adminGasUrl").value = localStorage.getItem(STORAGE_KEYS.GAS_URL) || "";
+  const cachedGsUrl = localStorage.getItem("bihaan_surguja_gsheet_url") || "";
+  if (isAbsAdmin && cachedGsUrl) {
+    const aBtn = document.getElementById("adminGsheetBtn");
+    if (aBtn) aBtn.href = cachedGsUrl;
+    const dLink = document.getElementById("gsheetDirectLink");
+    if (dLink) { dLink.href = cachedGsUrl; dLink.classList.remove("hidden"); }
+  }
 
   if (localStorage.getItem(STORAGE_KEYS.WEBAUTHN_CRED)) {
     document.getElementById("biometricStatusText").textContent = "✅ इस डिवाइस पर फिंगरप्रिंट / बायोमेट्रिक लॉक सक्रिय है।";
@@ -617,7 +624,8 @@ async function syncData() {
     allUsers = data.users || [];
     allTargets = data.targets || [];
     mergeLocalTargets_();
-    gsheetMasterUrl = data.gsheetUrl || "";
+    gsheetMasterUrl = data.gsheetUrl || localStorage.getItem("bihaan_surguja_gsheet_url") || "";
+    if (data.gsheetUrl) localStorage.setItem("bihaan_surguja_gsheet_url", data.gsheetUrl);
 
     // Only DMMU, Zilla CEO, and Developer get direct Google Sheet URL
     const gsLink = document.getElementById("gsheetDirectLink");
@@ -717,7 +725,7 @@ function loadTargetFormKpis() {
   tbody.innerHTML = "";
   schema.sections.forEach(sec => {
     const secRow = document.createElement("tr");
-    secRow.innerHTML = `<td colspan="4" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(sec.name)}</td>`;
+    secRow.innerHTML = `<td colspan="4" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(localizeSchemaText_(sec.name))}</td>`;
     tbody.appendChild(secRow);
 
     sec.kpis.forEach(kpi => {
@@ -730,7 +738,7 @@ function loadTargetFormKpis() {
         <td>${kpi.id}</td>
         <td>${escHtml(kpi.text)}</td>
         <td><input type="text" class="fixed-target-input" value="${escHtml(existingVal)}" placeholder="Enter target..." style="padding:4px;" /></td>
-        <td><small style="color:var(--text-muted);">${escHtml(kpi.evidence)}</small></td>
+        <td><small style="color:var(--text-muted);">${escHtml(localizeSchemaText_(kpi.evidence))}</small></td>
       `;
       tbody.appendChild(tr);
     });
@@ -836,8 +844,9 @@ function renderSavedTargetsTable() {
       <td>${escHtml(t.cadreType)}</td>
       <td>${escHtml(t.setBy || "-")}</td>
       <td><small>${escHtml((t.updatedAt || "").slice(0, 10))}</small></td>
-      <td>
+      <td style="white-space:nowrap;">
         <button type="button" class="btn btn-outline btn-sm" onclick="editTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Edit</button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="deleteTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Delete</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -851,6 +860,37 @@ function editTargetRule(monthYear, block, clf, cadreType) {
   document.getElementById("targetClf").value = clf === "ALL" ? "" : clf;
   document.getElementById("targetCadreType").value = cadreType;
   loadTargetFormKpis();
+  const formEl = document.getElementById("targetSetupForm");
+  if (formEl) formEl.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function deleteTargetRule(monthYear, block, clf, cadreType) {
+  if (!currentUser || !currentUser.isAbsoluteAdmin) return;
+  if (!confirm("Delete this target rule?")) return;
+
+  const key = "bihaan_surguja_local_targets";
+  try {
+    const list = JSON.parse(localStorage.getItem(key) || "[]").filter(x =>
+      !(x.monthYear === monthYear && x.block === block && String(x.clf || "ALL").toLowerCase() === String(clf || "ALL").toLowerCase() && x.cadreType === cadreType)
+    );
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch (e) {}
+
+  allTargets = (allTargets || []).filter(x =>
+    !(x.monthYear === monthYear && x.block === block && String(x.clf || "ALL").toLowerCase() === String(clf || "ALL").toLowerCase() && x.cadreType === cadreType)
+  );
+  renderSavedTargetsTable();
+  loadTargetFormKpis();
+
+  try {
+    const res = await apiRequest({
+      action: "deleteCadreTargets",
+      targetRule: { monthYear, block, clf, cadreType }
+    });
+    if (res && res.ok) {
+      showAlert("globalAlert", res.message || "Target rule deleted.", "success");
+    }
+  } catch (err) {}
 }
 
 function openSetTargetFromCurrentFilter() {
@@ -926,9 +966,15 @@ function renderReportsTable(list) {
       : r.voStatus === "VERIFIED" ? "VO सत्यापित"
       : "समीक्षा लंबित";
 
-    let actionBtns = `<button type="button" class="btn btn-outline btn-sm" onclick="openReportForEditOrReview('${escHtml(r.reportId)}')">${canReview ? "समीक्षा / देखें" : "देखें / एडिट"}</button>`;
+    const photoCount = Array.isArray(r.kpis)
+      ? r.kpis.reduce((cnt, k) => cnt + (Array.isArray(k.evidencePhotos) ? k.evidencePhotos.length : (Array.isArray(k.evidencePhotoUrls) ? k.evidencePhotoUrls.length : (k.evidencePhoto ? 1 : 0))), 0)
+      : 0;
+    let actionBtns = `<button type="button" class="btn btn-outline btn-sm" onclick="openReportForEditOrReview('${escHtml(r.reportId)}')">${canReview ? (currentLang === "en" ? "Review / View" : "समीक्षा / देखें") : (currentLang === "en" ? "View / Edit" : "देखें / एडिट")}</button>`;
+    if (isAbsAdmin || canReview || photoCount > 0) {
+      actionBtns += ` <button type="button" class="btn btn-outline btn-sm" onclick="openReportPhotosModal('${escHtml(r.reportId)}')">📷 Photos (${photoCount})</button>`;
+    }
     if (isAbsAdmin) {
-      actionBtns += ` <button type="button" class="btn btn-danger btn-sm" onclick="deleteReport('${escHtml(r.reportId)}')">डिलीट</button>`;
+      actionBtns += ` <button type="button" class="btn btn-danger btn-sm" onclick="deleteReport('${escHtml(r.reportId)}')">${currentLang === "en" ? "Delete" : "डिलीट"}</button>`;
     }
 
     const isCadreView = currentUser.role === "CADRE";
@@ -1116,12 +1162,54 @@ function resetReportForm() {
   buildDynamicKpiForm();
 }
 
+
+function localizeSchemaText_(txt) {
+  const s = String(txt || "");
+  if (currentLang !== "en" || !s) return s;
+  const map = {
+    "मुख्य निष्पादन संकेतक (KPI Points - SOP आधार)": "Key Performance Indicators (KPI Points - SOP Basis)",
+    "खंड-अ: संभावित उद्यमी पहचान, उद्यामिता प्रशिक्षण (EDP) एवं व्यवसाय योजना निर्माण": "Section-A: Entrepreneur Identification, EDP Training & Business Plan",
+    "खंड-ब: उद्यम वित्त पोषण (CEF / बैंक लिंकेज), इकाई स्थापना एवं ऋण वसूली": "Section-B: Enterprise Financing (CEF / Bank Linkage), Setup & Recovery",
+    "खंड-स: उद्यम बहीखाता, वैधानिक पंजीयन एवं बाजार लिंकेज (OSF Services)": "Section-C: Bookkeeping, Statutory Registration & Market Linkage",
+    "खंड-द: लखपति दीदी ट्रैकिंग, डिजिटल प्रविष्टि एवं संस्थागत अनुपालन": "Section-D: Lakhpati Didi Tracking, Digital Entry & Compliance",
+    "खंड-अ: संस्थागत बैठक एवं बही-खाता अद्यतनीकरण (Bookkeeping & Registers)": "Section-A: Institutional Meetings & Bookkeeping Registers",
+    "खंड-ब: वित्तीय लेनदेन, ऋण वसूली एवं बैंक लिंकेज प्रबंधन": "Section-B: Financial Transactions, Loan Recovery & Bank Linkage",
+    "खंड-स: डिजिटल पोर्टल (LokOS) एवं मासिक वित्तीय समाधान (Reconciliation)": "Section-C: Digital Portal (LokOS) & Monthly Bank Reconciliation",
+    "खंड-द: प्रशिक्षण, ऑडिट सहयोग एवं अनुपालन": "Section-D: Training, Audit Support & Compliance",
+    "बैठक पंजी": "Meeting Register",
+    "प्रस्ताव पंजी": "Resolution / Proposal Register",
+    "उप-समिति मिनिट्स": "Sub-Committee Minutes",
+    "सदस्यता पंजी": "Membership Register",
+    "ग्रेडिंग रजिस्टर": "Grading Register",
+    "वितरण पंजी": "Disbursement Register",
+    "डीसीबी रजिस्टर": "DCB Register",
+    "बैंक स्वीकृति पत्र": "Bank Sanction Letter",
+    "लेखा बही": "Account Ledger",
+    "ऑडिट प्रतिवेदन": "Audit Report",
+    "कार्य मूल्यांकन पंजी": "Performance Evaluation Register",
+    "प्रशिक्षण पंजी": "Training Register",
+    "MIS स्टेटस रिपोर्ट": "MIS Status Report",
+    "सत्यापन टीप": "Verification Note",
+    "आजीविका रजिस्टर": "Livelihood Register",
+    "नामांकन सूची": "Enrollment List",
+    "लाभान्वित सूची": "Beneficiary List",
+    "जीबी मिनिट्स": "GB Minutes",
+    "01 बैठक": "01 Meeting",
+    "मासिक": "Monthly",
+    "अनिवार्य": "Mandatory",
+    "10 तारीख तक": "By 10th of Month",
+    "नियमित": "Regular",
+    "वार्षिक": "Annual"
+  };
+  return map[s] || s;
+}
+
 function buildDynamicKpiForm(existingData = null) {
   const code = document.getElementById("formCadreType").value;
   const schema = CADRE_SCHEMAS[code];
   if (!schema) return;
 
-  document.getElementById("formHeaderTitle").textContent = schema.titleHi;
+  document.getElementById("formHeaderTitle").textContent = currentLang === "en" ? schema.titleEn : schema.titleHi;
   document.getElementById("formHierarchyNote").textContent = `समीक्षा प्रवाह: ${schema.hierarchy} (${schema.titleEn})`;
   const isCadreFormView = currentUser && currentUser.role === "CADRE";
   const marksTh = document.getElementById("kpiMarksColHeader");
@@ -1135,7 +1223,7 @@ function buildDynamicKpiForm(existingData = null) {
 
   schema.sections.forEach(sec => {
     const secRow = document.createElement("tr");
-    secRow.innerHTML = `<td colspan="${isCadreFormView ? 6 : 7}" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(sec.name)}${sec.maxMarks ? ` — [कुल ${sec.maxMarks} अंक]` : ""}</td>`;
+    secRow.innerHTML = `<td colspan="${isCadreFormView ? 6 : 7}" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(localizeSchemaText_(sec.name))}${sec.maxMarks ? ` — [कुल ${sec.maxMarks} अंक]` : ""}</td>`;
     tbody.appendChild(secRow);
 
     sec.kpis.forEach(kpi => {
@@ -1201,7 +1289,7 @@ function buildDynamicKpiForm(existingData = null) {
         <td><input type="text" class="kpi-pct" readonly tabindex="-1" value="${escHtml(pctVal)}" style="padding:4px; background:var(--surface-2); pointer-events:none; cursor:default;" /></td>
         <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
         <td>
-          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">${escHtml(kpi.evidence)}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">${escHtml(localizeSchemaText_(kpi.evidence))}</div>
           <label class="btn btn-outline btn-sm" style="padding:3px 8px; font-size:0.72rem; margin:0; cursor:pointer; display:inline-flex; white-space:nowrap;">
             <span data-i18n="uploadPhotosBtn">${currentLang === "en" ? "📷 Upload Photos" : "📷 फ़ोटो अपलोड करें"}</span>
             <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" multiple style="display:none;" onchange="handleKpiEvidenceUpload(this)" />
@@ -1375,9 +1463,13 @@ function interpretKpiLocalAI_(kpiText, tRaw, aRaw) {
 
   const aLower = aStr.toLowerCase();
   const tLower = tStr.toLowerCase();
+  const isDeadlineTarget = /तारीख|दिनांक|तक|by |before|deadline|date/i.test(tStr) || /तारीख|दिनांक|तक/i.test(kpiText || "");
+  const tNum = extractNum_(tStr);
+  const aNum = extractNum_(aStr);
+  const hasNumericQuantityTarget = !isNaN(tNum) && tNum > 0 && !isDeadlineTarget && /^\d+(\.\d+)?(\s*[a-zA-Z\u0900-\u097F]+)?$/.test(tStr);
 
-  // 1. Explicit completion / affirmative words
-  if (/^(completed|complete|done|yes|पूर्ण|संपन्न|हो गया|हाँ|ok|okay)$/i.test(aLower)) {
+  // 1. Explicit completion / affirmative words (ONLY when target is qualitative/non-numeric, NOT when target is a number like 1000!)
+  if (!hasNumericQuantityTarget && /^(completed|complete|done|yes|पूर्ण|संपन्न|हो गया|हाँ|ok|okay)$/i.test(aLower)) {
     return { pct: "100%", ratio: 1, statusLabel: currentLang === "en" ? "Completed" : "पूर्ण" };
   }
 
@@ -1387,17 +1479,13 @@ function interpretKpiLocalAI_(kpiText, tRaw, aRaw) {
   if (!isNaN(tCad) && !isNaN(aCad) && tCad > 0) {
     const effRatio = Math.min(1, aCad / tCad);
     return {
-      pct: Math.round(effRatio * 100) + "%",
+      pct: (Math.floor(effRatio * 1000) / 10) + "%",
       ratio: effRatio,
       statusLabel: aCad >= tCad ? (currentLang === "en" ? "On Track" : "नियमित / पूर्ण") : (currentLang === "en" ? "Partial" : "आंशिक")
     };
   }
 
   // 3. Deadline / "by Xth" date targets (e.g., "10 तारीख तक" with achieved "9 TH" or "9")
-  const isDeadlineTarget = /तारीख|दिनांक|तक|by|before|deadline|date/i.test(tStr) || /तारीख|दिनांक|तक/i.test(kpiText || "");
-  const tNum = extractNum_(tStr);
-  const aNum = extractNum_(aStr);
-
   if (isDeadlineTarget && !isNaN(tNum) && tNum > 0 && !isNaN(aNum) && aNum > 0) {
     if (aNum <= tNum) {
       return {
@@ -1408,26 +1496,26 @@ function interpretKpiLocalAI_(kpiText, tRaw, aRaw) {
     } else {
       const delayedRatio = Math.max(0.1, Math.min(1, tNum / aNum));
       return {
-        pct: Math.round(delayedRatio * 100) + "%",
+        pct: (Math.floor(delayedRatio * 1000) / 10) + "%",
         ratio: delayedRatio,
         statusLabel: currentLang === "en" ? "Delayed" : "विलंबित"
       };
     }
   }
 
-  // 4. Standard numeric target vs achievement
+  // 4. Standard numeric target vs achievement (use 1-decimal floor so 998/1000 is 99.8%, never falsely 100%)
   if (!isNaN(tNum) && tNum > 0 && !isNaN(aNum)) {
-    const rawPct = Math.round((aNum / tNum) * 100);
+    const exactPct = Math.floor((aNum / tNum) * 1000) / 10;
     const ratio = Math.min(1, Math.max(0, aNum / tNum));
     return {
-      pct: rawPct + "%",
+      pct: exactPct + "%",
       ratio: ratio,
-      statusLabel: ratio >= 1 ? (currentLang === "en" ? "Completed" : "पूर्ण") : ""
+      statusLabel: aNum >= tNum ? (currentLang === "en" ? "Completed" : "पूर्ण") : (currentLang === "en" ? "In Progress" : "प्रगतिशील")
     };
   }
 
-  // 5. Exact match with target text
-  if (tLower && aLower === tLower) {
+  // 5. Exact match with non-numeric target text
+  if (!hasNumericQuantityTarget && tLower && aLower === tLower) {
     return { pct: "100%", ratio: 1, statusLabel: currentLang === "en" ? "Completed" : "पूर्ण" };
   }
 
@@ -1479,6 +1567,72 @@ function recalculateTotals() {
   else if (sum >= 60) grade = "B";
   else if (sum >= 40) grade = "C";
   document.getElementById("formGrade").value = grade;
+}
+
+
+function openReportPhotosModal(reportId) {
+  const rep = allReports.find(r => r.reportId === reportId);
+  if (!rep) return;
+  const modal = document.getElementById("photoViewerModal");
+  const body = document.getElementById("photoModalBody");
+  const title = document.getElementById("photoModalTitle");
+  if (!modal || !body) return;
+
+  title.textContent = `${rep.cadreName} (${rep.cadreType} • ${rep.monthYear}) — Evidence Photos`;
+  const cards = [];
+  (rep.kpis || []).forEach(k => {
+    const list = Array.isArray(k.evidencePhotos) && k.evidencePhotos.length
+      ? k.evidencePhotos
+      : (Array.isArray(k.evidencePhotoUrls) && k.evidencePhotoUrls.length
+          ? k.evidencePhotoUrls.map((u, idx) => ({ name: (k.evidencePhotoNames && k.evidencePhotoNames[idx]) || ("Photo_" + (idx + 1)), url: u, dataUrl: u }))
+          : (k.evidencePhoto ? [{ name: k.evidenceFileName || "Evidence Photo", url: k.evidencePhoto.startsWith("http") ? k.evidencePhoto : "", dataUrl: k.evidencePhoto }] : []));
+
+    list.forEach((p, idx) => {
+      const src = p.url || p.dataUrl || "";
+      if (!src) return;
+      const isDrive = src.startsWith("http");
+      cards.push(`
+        <div style="border:1px solid var(--border); border-radius:10px; padding:0.65rem; background:var(--surface-2);">
+          <div style="font-size:0.75rem; font-weight:700; color:var(--primary); margin-bottom:4px;">KPI #${escHtml(k.id)} — ${escHtml(p.name || ("Photo " + (idx + 1)))}</div>
+          ${isDrive
+            ? `<div style="padding:0.75rem; text-align:center;"><a href="${escHtml(src)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">🔗 Open Photo in Google Drive</a></div>`
+            : `<img src="${src}" alt="${escHtml(p.name)}" style="width:100%; max-height:210px; object-fit:contain; border-radius:6px; background:#000;" />`
+          }
+        </div>
+      `);
+    });
+  });
+
+  body.innerHTML = cards.length
+    ? cards.join("")
+    : `<div style="color:var(--text-muted); padding:1rem;">No photos uploaded in this report yet.</div>`;
+  modal.classList.remove("hidden");
+}
+
+function closePhotoModal() {
+  const modal = document.getElementById("photoViewerModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function openMasterSheetGuard(e, anchorEl) {
+  const href = anchorEl ? anchorEl.getAttribute("href") : "";
+  if (!href || href === "#" || href.startsWith("javascript:")) {
+    e.preventDefault();
+    const savedUrl = localStorage.getItem("bihaan_surguja_gsheet_url") || "";
+    if (savedUrl && savedUrl.startsWith("http")) {
+      anchorEl.href = savedUrl;
+      window.open(savedUrl, "_blank", "noopener,noreferrer");
+      return false;
+    }
+    const entered = window.prompt("Master Google Sheet URL not synced yet. Paste your Google Sheet URL once (or click Sync after redeploying Code.gs):");
+    if (entered && entered.trim().startsWith("http")) {
+      localStorage.setItem("bihaan_surguja_gsheet_url", entered.trim());
+      anchorEl.href = entered.trim();
+      window.open(entered.trim(), "_blank", "noopener,noreferrer");
+    }
+    return false;
+  }
+  return true;
 }
 
 function openReportForEditOrReview(reportId) {
@@ -1941,7 +2095,15 @@ const FULL_I18N = {
     thDeletedAt: "Deleted At",
     thDeletedBy: "Deleted By",
     thRole: "Role",
-    thReportId: "Report ID"
+    thReportId: "Report ID",
+    setThemeTitle: "🎨 Appearance & Theme Settings",
+    setPinTitle: "🔐 Fingerprint & PIN Device Lock",
+    setAccountTitle: "👤 Account Details & Password",
+    setSystemTitle: "🛠️ System & Google Sheet Controls (Admin Only)",
+    logoutBtn: "Logout from Device",
+    updateProfileBtn: "Update Profile & Password",
+    updateApiBtn: "Update API URL",
+    openMasterSheetBtn: "Open Master Google Sheet"
   },
   hi: {
     brandTitle: "सीजीएसआरएलएम बिहान — जिला सरगुजा",
@@ -2000,7 +2162,15 @@ const FULL_I18N = {
     thDeletedAt: "हटाने का समय",
     thDeletedBy: "किसने हटाया",
     thRole: "भूमिका",
-    thReportId: "रिपोर्ट आईडी"
+    thReportId: "रिपोर्ट आईडी",
+    setThemeTitle: "🎨 डिस्प्ले एवं थीम मोड",
+    setPinTitle: "🔐 फिंगरप्रिंट एवं PIN लॉक",
+    setAccountTitle: "👤 खाता विवरण एवं पासवर्ड",
+    setSystemTitle: "🛠️ सिस्टम एवं Google Sheet नियंत्रण",
+    logoutBtn: "लॉगआउट करें",
+    updateProfileBtn: "प्रोफ़ाइल व पासवर्ड अपडेट करें",
+    updateApiBtn: "API URL अपडेट करें",
+    openMasterSheetBtn: "मास्टर Google Sheet खोलें"
   }
 };
 
