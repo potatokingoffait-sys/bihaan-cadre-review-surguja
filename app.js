@@ -19,10 +19,12 @@ let realAuthenticatedUser = null;
 let devPreviewState = { active: false, role: "DEVELOPER", cadreType: "RBK", block: "अंबिकापुर (Ambikapur)", targetUserId: "" };
 let allReports = [];
 let allUsers = [];
+let allTargets = [];
 let gsheetMasterUrl = "";
 let regCategory = "DEPARTMENT";
 let pinBuffer = "";
 let blockChartInstance = null;
+let cadreChartInstance = null;
 let gradeChartInstance = null;
 
 // Safe HTML escaping to neutralize XSS
@@ -118,7 +120,7 @@ function registerServiceWorker() {
 
 function populateStaticDropdowns() {
   // Blocks
-  const blockSelects = ["regBlock", "filterBlock", "formBlock", "devPreviewBlock"];
+  const blockSelects = ["regBlock", "filterBlock", "formBlock", "devPreviewBlock", "targetBlock"];
   blockSelects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -130,15 +132,15 @@ function populateStaticDropdowns() {
     });
   });
 
-  // Cadres
-  const cadreSelects = ["regCadreSelect", "filterCadre", "formCadreType", "dirCadre", "devPreviewCadre"];
+  // Cadres (clean short label for filters/selectors)
+  const cadreSelects = ["regCadreSelect", "filterCadre", "formCadreType", "dirCadre", "devPreviewCadre", "targetCadreType"];
   cadreSelects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     Object.values(CADRE_SCHEMAS).forEach(c => {
       const opt = document.createElement("option");
       opt.value = c.code;
-      opt.textContent = c.titleHi;
+      opt.textContent = c.code + " — " + c.titleEn.replace(/ Monthly.*$/i, "");
       el.appendChild(opt);
     });
   });
@@ -533,6 +535,9 @@ async function enterPortal(skipSync = false, freshLogin = false) {
   document.getElementById("adminSystemSettingsCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("auditLogCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("navDeletedBtn").classList.toggle("hidden", !isAbsAdmin);
+  document.getElementById("navTargetsBtn").classList.toggle("hidden", !isAbsAdmin);
+  const jmpBtn = document.getElementById("jumpToSetTargetBtn");
+  if (jmpBtn) jmpBtn.classList.toggle("hidden", !isAbsAdmin);
 
   const t = I18N[currentLang] || I18N.en;
   const isCadreUser = currentUser.role === "CADRE";
@@ -585,13 +590,14 @@ async function enterPortal(skipSync = false, freshLogin = false) {
 }
 
 function switchMainTab(tabId, btnEl) {
-  ["tabDashboard", "tabEntry", "tabAdmin", "tabDeleted", "tabSettings"].forEach(id => {
+  ["tabDashboard", "tabEntry", "tabTargets", "tabAdmin", "tabDeleted", "tabSettings"].forEach(id => {
     document.getElementById(id).classList.add("hidden");
   });
   document.getElementById(tabId).classList.remove("hidden");
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
   if (btnEl) btnEl.classList.add("active");
   if (tabId === "tabDeleted") loadDeletedRecords();
+  if (tabId === "tabTargets") { loadTargetFormKpis(); renderSavedTargetsTable(); }
 }
 
 async function syncData() {
@@ -609,6 +615,7 @@ async function syncData() {
     }
     allReports = data.reports || [];
     allUsers = data.users || [];
+    allTargets = data.targets || [];
     gsheetMasterUrl = data.gsheetUrl || "";
 
     // Only DMMU, Zilla CEO, and Developer get direct Google Sheet URL
@@ -623,7 +630,9 @@ async function syncData() {
     }
 
     populateMonthFilter();
+    populateClfFilter();
     renderDashboard();
+    renderSavedTargetsTable();
     renderUsersTable();
     if (currentUser.isAbsoluteAdmin) {
       loadAuditLogs();
@@ -650,14 +659,178 @@ function populateMonthFilter() {
 // ==========================================================================
 // DASHBOARD ANALYTICS, CHARTS & REPORTS TABLE
 // ==========================================================================
+
+function populateClfFilter() {
+  const sel = document.getElementById("filterClf");
+  if (!sel) return;
+  const current = sel.value;
+  const clfs = [...new Set(allReports.map(r => r.clf).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="ALL">All CLFs</option>';
+  clfs.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c;
+    sel.appendChild(opt);
+  });
+  if (clfs.includes(current)) sel.value = current;
+}
+
+function getFixedTargetForKpi_(cadreCode, kpiId) {
+  if (!Array.isArray(allTargets) || !allTargets.length) return "";
+  const m = (document.getElementById("formMonthYear") && document.getElementById("formMonthYear").value) || "";
+  const b = (document.getElementById("formBlock") && document.getElementById("formBlock").value) || "ALL";
+  const c = ((document.getElementById("formClf") && document.getElementById("formClf").value) || "").trim().toLowerCase();
+
+  const matching = allTargets.filter(t => t.cadreType === cadreCode && (!t.monthYear || t.monthYear === m));
+  // Priority 1: Exact Month + Block + CLF
+  let rule = matching.find(t => t.block === b && t.clf && t.clf.toLowerCase() !== "all" && t.clf.toLowerCase() === c);
+  // Priority 2: Exact Month + Block + ALL CLFs
+  if (!rule) rule = matching.find(t => t.block === b && (!t.clf || t.clf.toLowerCase() === "all"));
+  // Priority 3: Exact Month + ALL Blocks
+  if (!rule) rule = matching.find(t => (!t.block || t.block === "ALL"));
+  if (!rule || !rule.kpiTargets) return "";
+  return rule.kpiTargets[String(kpiId)] ?? "";
+}
+
+function loadTargetFormKpis() {
+  const mEl = document.getElementById("targetMonthYear");
+  if (mEl && !mEl.value) {
+    const now = new Date();
+    mEl.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }
+  const monthYear = mEl ? mEl.value : "";
+  const block = (document.getElementById("targetBlock") && document.getElementById("targetBlock").value) || "ALL";
+  const clfRaw = ((document.getElementById("targetClf") && document.getElementById("targetClf").value) || "").trim() || "ALL";
+  const code = (document.getElementById("targetCadreType") && document.getElementById("targetCadreType").value) || "PRP";
+  const schema = CADRE_SCHEMAS[code];
+  const tbody = document.getElementById("targetKpiBody");
+  if (!schema || !tbody) return;
+
+  const existingRule = (allTargets || []).find(t =>
+    t.monthYear === monthYear &&
+    t.block === block &&
+    (t.clf || "ALL").toLowerCase() === clfRaw.toLowerCase() &&
+    t.cadreType === code
+  );
+
+  tbody.innerHTML = "";
+  schema.sections.forEach(sec => {
+    const secRow = document.createElement("tr");
+    secRow.innerHTML = `<td colspan="4" style="background:var(--primary-soft); color:var(--primary); font-weight:700;">${escHtml(sec.name)}</td>`;
+    tbody.appendChild(secRow);
+
+    sec.kpis.forEach(kpi => {
+      const existingVal = existingRule && existingRule.kpiTargets && existingRule.kpiTargets[String(kpi.id)] !== undefined
+        ? existingRule.kpiTargets[String(kpi.id)]
+        : (kpi.defaultTarget || "");
+      const tr = document.createElement("tr");
+      tr.dataset.targetKpiId = kpi.id;
+      tr.innerHTML = `
+        <td>${kpi.id}</td>
+        <td>${escHtml(kpi.text)}</td>
+        <td><input type="text" class="fixed-target-input" value="${escHtml(existingVal)}" placeholder="Enter target..." style="padding:4px;" /></td>
+        <td><small style="color:var(--text-muted);">${escHtml(kpi.evidence)}</small></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  });
+}
+
+async function saveCadreTargets(e) {
+  e.preventDefault();
+  if (!currentUser || !currentUser.isAbsoluteAdmin) return;
+  const monthYear = document.getElementById("targetMonthYear").value;
+  const block = document.getElementById("targetBlock").value || "ALL";
+  const clf = document.getElementById("targetClf").value.trim() || "ALL";
+  const cadreType = document.getElementById("targetCadreType").value;
+
+  const kpiTargets = {};
+  document.querySelectorAll("#targetKpiBody tr[data-target-kpi-id]").forEach(tr => {
+    const id = tr.dataset.targetKpiId;
+    const val = tr.querySelector(".fixed-target-input").value.trim();
+    if (val !== "") kpiTargets[id] = val;
+  });
+
+  try {
+    const res = await apiRequest({
+      action: "saveCadreTargets",
+      targetRule: { monthYear, block, clf, cadreType, kpiTargets }
+    });
+    if (!res.ok) {
+      showAlert("globalAlert", res.error, "danger");
+    } else {
+      showAlert("globalAlert", res.message || "Fixed targets saved successfully.", "success");
+      await syncData();
+      loadTargetFormKpis();
+    }
+  } catch (err) {
+    showAlert("globalAlert", err.message, "danger");
+  }
+}
+
+function renderSavedTargetsTable() {
+  const tbody = document.getElementById("savedTargetsTableBody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!allTargets || !allTargets.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:1rem;">No custom targets set yet.</td></tr>';
+    return;
+  }
+  allTargets.forEach(t => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${escHtml(t.monthYear)}</strong></td>
+      <td>${escHtml(t.block)}</td>
+      <td>${escHtml(t.clf)}</td>
+      <td>${escHtml(t.cadreType)}</td>
+      <td>${escHtml(t.setBy || "-")}</td>
+      <td><small>${escHtml((t.updatedAt || "").slice(0, 10))}</small></td>
+      <td>
+        <button type="button" class="btn btn-outline btn-sm" onclick="editTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Edit</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function editTargetRule(monthYear, block, clf, cadreType) {
+  switchMainTab("tabTargets", document.getElementById("navTargetsBtn"));
+  document.getElementById("targetMonthYear").value = monthYear;
+  document.getElementById("targetBlock").value = block;
+  document.getElementById("targetClf").value = clf === "ALL" ? "" : clf;
+  document.getElementById("targetCadreType").value = cadreType;
+  loadTargetFormKpis();
+}
+
+function openSetTargetFromCurrentFilter() {
+  const m = document.getElementById("filterMonth").value;
+  const b = document.getElementById("filterBlock").value;
+  const clf = document.getElementById("filterClf") ? document.getElementById("filterClf").value : "ALL";
+  const c = document.getElementById("filterCadre").value;
+  switchMainTab("tabTargets", document.getElementById("navTargetsBtn"));
+  if (m && m !== "ALL") document.getElementById("targetMonthYear").value = m;
+  if (b) document.getElementById("targetBlock").value = b;
+  if (clf && clf !== "ALL") document.getElementById("targetClf").value = clf;
+  if (c && c !== "ALL") document.getElementById("targetCadreType").value = c;
+  loadTargetFormKpis();
+}
+
 function renderDashboard() {
   const mFilter = document.getElementById("filterMonth").value;
   const bFilter = document.getElementById("filterBlock").value;
+  const clfEl = document.getElementById("filterClf");
+  const clfFilter = clfEl ? clfEl.value : "ALL";
   const cFilter = document.getElementById("filterCadre").value;
+
+  const bcEl = document.getElementById("drillBreadcrumb");
+  if (bcEl) {
+    bcEl.textContent = `District Surguja → ${bFilter === "ALL" ? "All Blocks" : bFilter} → ${clfFilter === "ALL" ? "All CLFs" : clfFilter} → ${cFilter === "ALL" ? "All Cadres" : cFilter}`;
+  }
 
   const filtered = allReports.filter(r => {
     if (mFilter !== "ALL" && r.monthYear !== mFilter) return false;
     if (bFilter !== "ALL" && r.block !== bFilter) return false;
+    if (clfFilter !== "ALL" && r.clf !== clfFilter) return false;
     if (cFilter !== "ALL" && r.cadreType !== cFilter) return false;
     return true;
   });
@@ -753,6 +926,17 @@ function renderCharts(list) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      onClick: (evt, elems) => {
+        if (elems && elems.length > 0) {
+          const idx = elems[0].index;
+          const clickedBlock = SURGUJA_BLOCKS[idx];
+          if (clickedBlock) {
+            const bSel = document.getElementById("filterBlock");
+            bSel.value = (bSel.value === clickedBlock) ? "ALL" : clickedBlock;
+            renderDashboard();
+          }
+        }
+      },
       plugins: {
         legend: { labels: { color: textColor } }
       },
@@ -762,6 +946,44 @@ function renderCharts(list) {
       }
     }
   });
+
+  // Cadre-wise interactive drill-down chart
+  const cadreCodes = Object.keys(CADRE_SCHEMAS);
+  const cadreCounts = cadreCodes.map(c => list.filter(r => r.cadreType === c).length);
+  if (cadreChartInstance) cadreChartInstance.destroy();
+  const cadreCanvas = document.getElementById("cadreChart");
+  if (cadreCanvas) {
+    cadreChartInstance = new Chart(cadreCanvas, {
+      type: "bar",
+      data: {
+        labels: cadreCodes,
+        datasets: [{
+          label: currentLang === "en" ? "Reports by Cadre" : "कैडरवार प्रतिवेदन",
+          data: cadreCounts,
+          backgroundColor: "#38bdf8"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        onClick: (evt, elems) => {
+          if (elems && elems.length > 0) {
+            const clickedCadre = cadreCodes[elems[0].index];
+            const cSel = document.getElementById("filterCadre");
+            cSel.value = (cSel.value === clickedCadre) ? "ALL" : clickedCadre;
+            renderDashboard();
+          }
+        },
+        plugins: {
+          legend: { labels: { color: textColor } }
+        },
+        scales: {
+          x: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: borderColor } },
+          y: { beginAtZero: true, suggestedMax: 5, ticks: { color: mutedColor }, grid: { color: borderColor } }
+        }
+      }
+    });
+  }
 
   const gA = list.filter(r => r.grade === "A").length;
   const gB = list.filter(r => r.grade === "B").length;
@@ -815,13 +1037,15 @@ function resetReportForm() {
     if (currentUser.clf && currentUser.clf !== "ALL") document.getElementById("formClf").value = currentUser.clf;
     if (currentUser.vo && currentUser.vo !== "ALL") document.getElementById("formVo").value = currentUser.vo;
     if (currentUser.role === "CADRE") {
-      document.getElementById("formCadreName").value = currentUser.fullName;
-      document.getElementById("formMobile").value = currentUser.mobile || currentUser.userId;
+      document.getElementById("formCadreName").value = currentUser.fullName || currentUser.userId;
+      document.getElementById("formMobile").value = currentUser.mobile || currentUser.userId || "9999999999";
     } else {
-      document.getElementById("formCadreName").value = "";
-      document.getElementById("formMobile").value = "";
+      document.getElementById("formCadreName").value = currentUser.fullName || "";
+      document.getElementById("formMobile").value = currentUser.mobile || currentUser.userId || "";
     }
   }
+  const profWrap = document.getElementById("cadreProfileFieldsWrap");
+  if (profWrap) profWrap.classList.toggle("hidden", !!(currentUser && currentUser.role === "CADRE"));
 
   document.getElementById("formCadreRemarks").value = "";
   document.getElementById("formReviewerRemarks").value = "";
@@ -865,7 +1089,8 @@ function buildDynamicKpiForm(existingData = null) {
 
     sec.kpis.forEach(kpi => {
       const savedKpi = existingData && existingData.kpis ? existingData.kpis.find(x => x.id === kpi.id) : null;
-      const targetVal = savedKpi ? savedKpi.target : (kpi.defaultTarget || "");
+      const fixedTargetVal = getFixedTargetForKpi_(code, kpi.id);
+      const targetVal = (savedKpi && savedKpi.target) ? savedKpi.target : (fixedTargetVal !== "" ? fixedTargetVal : (kpi.defaultTarget || ""));
       const achievedVal = savedKpi ? savedKpi.achieved : "";
       const pctVal = savedKpi ? savedKpi.pct : "";
       const marksVal = savedKpi ? savedKpi.marks : "";
@@ -1823,6 +2048,7 @@ function applyLanguageUI() {
 function clearAllFilters() {
   document.getElementById("filterMonth").value = "ALL";
   document.getElementById("filterBlock").value = "ALL";
+  if (document.getElementById("filterClf")) document.getElementById("filterClf").value = "ALL";
   document.getElementById("filterCadre").value = "ALL";
   renderDashboard();
 }

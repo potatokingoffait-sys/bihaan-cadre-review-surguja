@@ -225,6 +225,7 @@
     <nav class="nav-tabs" id="mainNavTabs">
       <button class="nav-btn active" data-tab="tabDashboard" onclick="switchMainTab('tabDashboard', this)">📊 डैशबोर्ड एवं रिपोर्ट्स</button>
       <button class="nav-btn" data-tab="tabEntry" id="navEntryBtn" onclick="switchMainTab('tabEntry', this)">📝 नया मासिक प्रतिवेदन</button>
+      <button class="nav-btn hidden" data-tab="tabTargets" id="navTargetsBtn" onclick="switchMainTab('tabTargets', this)">🎯 Set Targets</button>
       <button class="nav-btn hidden" data-tab="tabAdmin" id="navAdminBtn" onclick="switchMainTab('tabAdmin', this)">🛡️ एडमिन व यूज़र नियंत्रण</button>
       <button class="nav-btn hidden" data-tab="tabDeleted" id="navDeletedBtn" onclick="switchMainTab('tabDeleted', this)">🗑️ Deleted Data</button>
       <button class="nav-btn" data-tab="tabSettings" onclick="switchMainTab('tabSettings', this)">⚙️ सेटिंग्स (Theme, PIN, Account)</button>
@@ -288,15 +289,44 @@
           </div>
         </div>
 
-        <!-- Interactive Charts (Shown prominently for DMMU, Zilla CEO, Developer & Block/CLF reviewers) -->
-        <div id="analyticsChartsSection" class="chart-grid">
-          <div class="chart-box">
-            <div class="card-title" style="margin-bottom: 0.6rem;" data-i18n="blockChartTitle">विकासखंडवार प्रतिवेदन एवं औसत स्कोर</div>
-            <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="blockChart"></canvas></div>
+        <!-- Interactive Drill-Down Bar & Charts -->
+        <div id="analyticsChartsSection">
+          <div class="card no-print" style="padding: 0.75rem 1rem; margin-bottom: 0.85rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+            <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap; font-size:0.82rem;">
+              <strong>🔍 Drill-Down:</strong>
+              <span id="drillBreadcrumb" style="color:var(--primary); font-weight:700;">District Surguja (All Blocks • All CLFs • All Cadres)</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.45rem; flex-wrap:wrap;">
+              <select id="filterClf" onchange="renderDashboard()" style="width:auto; padding:0.32rem 0.6rem; font-size:0.8rem;">
+                <option value="ALL">All CLFs</option>
+              </select>
+              <button type="button" class="btn btn-outline btn-sm" onclick="clearAllFilters()">Reset Drill-Down</button>
+              <button type="button" class="btn btn-primary btn-sm hidden" id="jumpToSetTargetBtn" onclick="openSetTargetFromCurrentFilter()">🎯 Set Target for Selection</button>
+            </div>
           </div>
-          <div class="chart-box">
-            <div class="card-title" style="margin-bottom: 0.6rem;" data-i18n="gradeChartTitle">कैडरवार प्रदर्शन एवं ग्रेड वितरण</div>
-            <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="gradeChart"></canvas></div>
+
+          <div class="chart-grid">
+            <div class="chart-box">
+              <div class="card-title" style="margin-bottom: 0.4rem; display:flex; justify-content:space-between; align-items:center;">
+                <span data-i18n="blockChartTitle">Block-wise Reports & Avg Score</span>
+                <small style="font-size:0.7rem; color:var(--text-muted);">Click bar to drill down</small>
+              </div>
+              <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="blockChart"></canvas></div>
+            </div>
+            <div class="chart-box">
+              <div class="card-title" style="margin-bottom: 0.4rem; display:flex; justify-content:space-between; align-items:center;">
+                <span data-i18n="cadreChartTitle">Cadre-wise Performance</span>
+                <small style="font-size:0.7rem; color:var(--text-muted);">Click bar to filter</small>
+              </div>
+              <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="cadreChart"></canvas></div>
+            </div>
+            <div class="chart-box">
+              <div class="card-title" style="margin-bottom: 0.4rem; display:flex; justify-content:space-between; align-items:center;">
+                <span data-i18n="clfChartTitle">CLF-wise & Grade Mix</span>
+                <small style="font-size:0.7rem; color:var(--text-muted);">Click slice/bar to filter</small>
+              </div>
+              <div style="position:relative; height:185px; max-height:185px; width:100%;"><canvas id="gradeChart"></canvas></div>
+            </div>
           </div>
         </div>
 
@@ -388,19 +418,19 @@
               </div>
               <div class="field" style="text-align: left;">
                 <label for="formMonthYear">प्रतिवेदन माह व वर्ष</label>
-                <input id="formMonthYear" type="month" required />
+                <input id="formMonthYear" type="month" required onchange="buildDynamicKpiForm()" />
               </div>
               <div class="field" style="text-align: left;">
                 <label for="formBlock">विकासखंड (सरगुजा)</label>
-                <select id="formBlock" required></select>
+                <select id="formBlock" required onchange="buildDynamicKpiForm()"></select>
               </div>
               <div class="field" style="text-align: left;">
                 <label for="formClf">संकुल स्तरीय संगठन (CLF) का नाम</label>
-                <input id="formClf" type="text" required />
+                <input id="formClf" type="text" required onchange="buildDynamicKpiForm()" />
               </div>
             </div>
 
-            <div class="form-grid">
+            <div class="form-grid" id="cadreProfileFieldsWrap">
               <div class="field" style="text-align: left;">
                 <label for="formVo">ग्राम संगठन (VO) / OSF / बैंक शाखा</label>
                 <input id="formVo" type="text" />
@@ -498,6 +528,79 @@
               <button type="button" class="btn btn-outline" onclick="switchMainTab('tabDashboard', document.querySelector('[data-tab=tabDashboard]'))">रद्द करें</button>
             </div>
           </form>
+        </div>
+      </section>
+
+      <!-- TAB 2B: CEO ZP / DMMU / DEVELOPER TARGET SETTING PANEL -->
+      <section id="tabTargets" class="hidden">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🎯 Fix Monthly KPI Targets (CEO Zilla Panchayat / DMMU Surguja)</div>
+              <div style="font-size:0.78rem; color:var(--text-muted);">Set targets individually by Month, Block, CLF, and Cadre. Cadres automatically see their assigned targets.</div>
+            </div>
+          </div>
+
+          <form id="targetSetupForm" onsubmit="saveCadreTargets(event)">
+            <div class="form-grid">
+              <div class="field" style="text-align:left;">
+                <label for="targetMonthYear">Target Month & Year</label>
+                <input id="targetMonthYear" type="month" required onchange="loadTargetFormKpis()" />
+              </div>
+              <div class="field" style="text-align:left;">
+                <label for="targetBlock">Block (Surguja)</label>
+                <select id="targetBlock" onchange="loadTargetFormKpis()">
+                  <option value="ALL">All Blocks (District-wide Default)</option>
+                </select>
+              </div>
+              <div class="field" style="text-align:left;">
+                <label for="targetClf">CLF Name (Optional - Specific CLF or ALL)</label>
+                <input id="targetClf" type="text" placeholder="Leave blank or ALL for entire Block" onchange="loadTargetFormKpis()" />
+              </div>
+              <div class="field" style="text-align:left;">
+                <label for="targetCadreType">Cadre Format</label>
+                <select id="targetCadreType" onchange="loadTargetFormKpis()"></select>
+              </div>
+            </div>
+
+            <div class="table-wrap" style="margin: 1rem 0;">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:48px;">No.</th>
+                    <th>KPI / Action Indicator</th>
+                    <th style="width:180px;">Fixed Monthly Target</th>
+                    <th style="width:150px;">Verification Evidence</th>
+                  </tr>
+                </thead>
+                <tbody id="targetKpiBody"></tbody>
+              </table>
+            </div>
+
+            <button type="submit" class="btn btn-primary">💾 Save Fixed Targets</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Saved Target Rules (Active Block / CLF / Cadre Targets)</div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Block</th>
+                  <th>CLF</th>
+                  <th>Cadre</th>
+                  <th>Set By</th>
+                  <th>Updated</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="savedTargetsTableBody"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
