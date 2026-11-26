@@ -61,6 +61,105 @@ function getDeviceLabel() {
 }
 
 // Theme Management: Default Phone Mode ("system"), "light", "dark", "high-contrast"
+
+let deferredInstallPrompt = null;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
+
+async function triggerPwaInstall() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    try { await deferredInstallPrompt.userChoice; } catch (e) {}
+    deferredInstallPrompt = null;
+    return;
+  }
+  const msg = currentLang === "en"
+    ? "To install this app on your phone/PC: open your browser menu (⋮ or Share) and tap 'Add to Home Screen' or 'Install App'."
+    : "इस ऐप को अपने फ़ोन या कंप्यूटर पर इंस्टॉल करने के लिए ब्राउज़र मेनू (⋮ या Share) खोलें और 'Add to Home Screen' या 'Install App' चुनें।";
+  alert(msg);
+}
+
+function openQuickUnlockFromLogin() {
+  const hasPin = !!localStorage.getItem(STORAGE_KEYS.PIN_HASH);
+  const hasBio = !!localStorage.getItem(STORAGE_KEYS.WEBAUTHN_CRED);
+  const savedUserStr = localStorage.getItem(STORAGE_KEYS.USER);
+  if (!hasPin && !hasBio) {
+    showAlert("authAlert", currentLang === "en" ? "No PIN or Fingerprint is set on this device yet. Sign in with password first, then set PIN/Fingerprint in Settings." : "इस डिवाइस पर अभी तक PIN या फिंगरप्रिंट सेट नहीं है। पहले पासवर्ड से लॉगिन करें और Settings में PIN/फिंगरप्रिंट सेट करें।", "danger");
+    return;
+  }
+  if (savedUserStr) {
+    try { currentUser = JSON.parse(savedUserStr); } catch (e) {}
+  }
+  if (!currentUser) {
+    currentUser = { userId: "PIN_USER", fullName: "Registered Device User", role: "CADRE", block: "Surguja", clf: "ALL", vo: "ALL", cadreType: "PRP", status: "ACTIVE" };
+  }
+  showUnlockScreen();
+}
+
+function clearDevicePin() {
+  localStorage.removeItem(STORAGE_KEYS.PIN_HASH);
+  showAlert("globalAlert", currentLang === "en" ? "Device PIN removed." : "डिवाइस PIN हटा दिया गया है।", "success");
+}
+
+function updateSubmitterBanner_(rep) {
+  const cEl = document.getElementById("bannerCadreDetails");
+  const aEl = document.getElementById("bannerAreaDetails");
+  if (!cEl || !aEl) return;
+  const name = (rep && rep.cadreName) || (document.getElementById("formCadreName") && document.getElementById("formCadreName").value) || (currentUser && currentUser.fullName) || "—";
+  const mobile = (rep && rep.mobile) || (document.getElementById("formMobile") && document.getElementById("formMobile").value) || (currentUser && currentUser.mobile) || "";
+  const cadre = (rep && rep.cadreType) || (document.getElementById("formCadreType") && document.getElementById("formCadreType").value) || "";
+  const block = (rep && rep.block) || (document.getElementById("formBlock") && document.getElementById("formBlock").value) || "";
+  const clf = (rep && rep.clf) || (document.getElementById("formClf") && document.getElementById("formClf").value) || "";
+  cEl.textContent = `${name}${mobile ? " (" + mobile + ")" : ""} • ${cadre}`;
+  aEl.textContent = `${block}${clf ? " • CLF: " + clf : ""}`;
+}
+
+function addCustomKpiRow() {
+  const kpiLabel = window.prompt(currentLang === "en" ? "Enter new KPI description (e.g., Piggery new members added / Mushroom farming):" : "नया KPI विवरण दर्ज करें (जैसे: सूकरपालन में जोड़े गए नए लोग / मशरूम खेती):");
+  if (!kpiLabel || !kpiLabel.trim()) return;
+  const tbody = document.getElementById("dynamicKpiBody");
+  if (!tbody) return;
+  const existingRows = tbody.querySelectorAll("tr[data-kpi-id]");
+  const nextId = existingRows.length + 1;
+  const code = document.getElementById("formCadreType").value;
+  const schema = CADRE_SCHEMAS[code];
+  const isCadreFormView = currentUser && currentUser.role === "CADRE";
+  const canScore = currentUser && ["VO_ADMIN", "CLF_ADMIN", "BPM", "DMMU", "ZILLA_CEO", "DEVELOPER"].includes(currentUser.role);
+  const statusPlaceholder = currentLang === "en" ? "Completed / In Progress" : "पूर्ण / प्रगतिशील";
+
+  const tr = document.createElement("tr");
+  tr.dataset.kpiId = nextId;
+  tr.dataset.customKpiText = kpiLabel.trim();
+  tr.dataset.maxMarks = (schema && schema.hasScoring) ? 5 : 0;
+  tr.dataset.evidencePhoto = "";
+  tr.dataset.evidenceFileName = "";
+  tr.dataset.evidencePhotosJson = "[]";
+
+  const marksCell = (schema && schema.hasScoring)
+    ? `<div style="display:flex; align-items:center; gap:4px;"><span>5 /</span><input type="number" class="kpi-marks" min="0" max="5" step="0.5" value="" ${canScore ? "" : "readonly"} oninput="recalculateTotals()" style="width:65px; padding:4px;" /></div>`
+    : `<input type="text" class="kpi-marks" value="" placeholder="${escHtml(statusPlaceholder)}" oninput="this.dataset.userEdited='1'" style="padding:4px;" />`;
+
+  tr.innerHTML = `
+    <td>${nextId}</td>
+    <td>${escHtml(kpiLabel.trim())}</td>
+    <td><input type="text" class="kpi-target" value="" oninput="calcRowPct(this)" ${(currentUser && currentUser.isAbsoluteAdmin) ? 'style="padding:4px;"' : 'readonly tabindex="-1" style="padding:4px; background:var(--surface-2); pointer-events:none;"'} /></td>
+    <td><input type="text" class="kpi-achieved" value="" oninput="calcRowPct(this)" style="padding:4px;" /></td>
+    <td><input type="text" class="kpi-pct" readonly tabindex="-1" value="" style="padding:4px; background:var(--surface-2); pointer-events:none; cursor:default;" /></td>
+    <td class="${isCadreFormView ? 'hidden' : ''}">${marksCell}</td>
+    <td>
+      <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">Photo / Register</div>
+      <label class="btn btn-outline btn-sm" style="padding:3px 8px; font-size:0.72rem; margin:0; cursor:pointer; display:inline-flex; white-space:nowrap;">
+        <span>${currentLang === "en" ? "📷 Upload Photos" : "📷 फ़ोटो अपलोड करें"}</span>
+        <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.pdf" multiple style="display:none;" onchange="handleKpiEvidenceUpload(this)" />
+      </label>
+      <div class="kpi-photo-preview" style="margin-top:4px;"></div>
+    </td>
+  `;
+  tbody.appendChild(tr);
+}
+
 function applyTheme(mode) {
   localStorage.setItem(STORAGE_KEYS.THEME, mode);
   const root = document.documentElement;
@@ -535,7 +634,7 @@ async function enterPortal(skipSync = false, freshLogin = false) {
   document.getElementById("adminSystemSettingsCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("auditLogCard").classList.toggle("hidden", !isAbsAdmin);
   document.getElementById("navDeletedBtn").classList.toggle("hidden", !isAbsAdmin);
-  document.getElementById("navTargetsBtn").classList.toggle("hidden", !isAbsAdmin);
+  document.getElementById("navTargetsBtn").classList.toggle("hidden", !(isAbsAdmin || currentUser.role === "BPM" || currentUser.role === "BLOCK_COORD"));
   const jmpBtn = document.getElementById("jumpToSetTargetBtn");
   if (jmpBtn) jmpBtn.classList.toggle("hidden", !isAbsAdmin);
 
@@ -690,7 +789,7 @@ function getFixedTargetForKpi_(cadreCode, kpiId) {
   const b = (document.getElementById("formBlock") && document.getElementById("formBlock").value) || "ALL";
   const c = ((document.getElementById("formClf") && document.getElementById("formClf").value) || "").trim().toLowerCase();
 
-  const matching = allTargets.filter(t => t.cadreType === cadreCode && (!t.monthYear || t.monthYear === m));
+  const matching = allTargets.filter(t => t.cadreType === cadreCode && (!t.monthYear || t.monthYear === m) && (!t.approvalStatus || t.approvalStatus === "APPROVED"));
   // Priority 1: Exact Month + Block + CLF
   let rule = matching.find(t => t.block === b && t.clf && t.clf.toLowerCase() !== "all" && t.clf.toLowerCase() === c);
   // Priority 2: Exact Month + Block + ALL CLFs
@@ -790,9 +889,36 @@ function mergeLocalTargets_() {
   allTargets = merged;
 }
 
+async function approveTargetRule(monthYear, block, clf, cadreType) {
+  if (!currentUser || !currentUser.isAbsoluteAdmin) return;
+  const key = "bihaan_surguja_local_targets";
+  try {
+    const list = JSON.parse(localStorage.getItem(key) || "[]");
+    list.forEach(x => {
+      if (x.monthYear === monthYear && x.block === block && String(x.clf || "ALL").toLowerCase() === String(clf || "ALL").toLowerCase() && x.cadreType === cadreType) {
+        x.approvalStatus = "APPROVED";
+        x.approvedBy = currentUser.userId;
+      }
+    });
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch (e) {}
+  (allTargets || []).forEach(x => {
+    if (x.monthYear === monthYear && x.block === block && String(x.clf || "ALL").toLowerCase() === String(clf || "ALL").toLowerCase() && x.cadreType === cadreType) {
+      x.approvalStatus = "APPROVED";
+      x.approvedBy = currentUser.userId;
+    }
+  });
+  renderSavedTargetsTable();
+  try {
+    await apiRequest({ action: "approveCadreTargets", targetRule: { monthYear, block, clf, cadreType } });
+  } catch (e) {}
+  showAlert("globalAlert", "Target rule approved by " + currentUser.role + ".", "success");
+}
+
 async function saveCadreTargets(e) {
   e.preventDefault();
-  if (!currentUser || !currentUser.isAbsoluteAdmin) return;
+  const canPropose = currentUser && (currentUser.isAbsoluteAdmin || currentUser.role === "BPM" || currentUser.role === "BLOCK_COORD");
+  if (!canPropose) return;
   const monthYear = document.getElementById("targetMonthYear").value;
   const block = document.getElementById("targetBlock").value || "ALL";
   const clf = document.getElementById("targetClf").value.trim() || "ALL";
@@ -805,7 +931,8 @@ async function saveCadreTargets(e) {
     if (val !== "") kpiTargets[id] = val;
   });
 
-  const rule = { monthYear, block, clf, cadreType, kpiTargets };
+  const approvalStatus = currentUser.isAbsoluteAdmin ? "APPROVED" : "PENDING_APPROVAL";
+  const rule = { monthYear, block, clf, cadreType, kpiTargets, approvalStatus };
   saveLocalTargetRule_(rule);
   mergeLocalTargets_();
   renderSavedTargetsTable();
@@ -837,15 +964,20 @@ function renderSavedTargetsTable() {
   }
   allTargets.forEach(t => {
     const tr = document.createElement("tr");
+    const st = t.approvalStatus || "APPROVED";
+    const approveBtn = (currentUser && currentUser.isAbsoluteAdmin && st !== "APPROVED")
+      ? `<button type="button" class="btn btn-primary btn-sm" onclick="approveTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Approve</button> `
+      : "";
     tr.innerHTML = `
       <td><strong>${escHtml(t.monthYear)}</strong></td>
       <td>${escHtml(t.block)}</td>
       <td>${escHtml(t.clf)}</td>
       <td>${escHtml(t.cadreType)}</td>
       <td>${escHtml(t.setBy || "-")}</td>
+      <td><span class="badge ${st === 'APPROVED' ? 'badge-A' : 'badge-C'}">${escHtml(st)}</span></td>
       <td><small>${escHtml((t.updatedAt || "").slice(0, 10))}</small></td>
       <td style="white-space:nowrap;">
-        <button type="button" class="btn btn-outline btn-sm" onclick="editTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Edit</button>
+        ${approveBtn}<button type="button" class="btn btn-outline btn-sm" onclick="editTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Edit</button>
         <button type="button" class="btn btn-danger btn-sm" onclick="deleteTargetRule('${escHtml(t.monthYear)}','${escHtml(t.block)}','${escHtml(t.clf)}','${escHtml(t.cadreType)}')">Delete</button>
       </td>
     `;
@@ -876,9 +1008,25 @@ async function deleteTargetRule(monthYear, block, clf, cadreType) {
     localStorage.setItem(key, JSON.stringify(list));
   } catch (e) {}
 
+  const removedTarget = (allTargets || []).find(x =>
+    x.monthYear === monthYear && x.block === block && String(x.clf || "ALL").toLowerCase() === String(clf || "ALL").toLowerCase() && x.cadreType === cadreType
+  );
+  recordLocalDeletedItem_({
+    reportId: "TARGET-" + cadreType + "-" + monthYear,
+    monthYear: monthYear,
+    cadreType: cadreType,
+    cadreName: "Target Rule (" + (removedTarget && removedTarget.kpiTargets ? Object.keys(removedTarget.kpiTargets).length : 0) + " KPIs)",
+    block: block,
+    clf: clf,
+    totalScore: "TARGET",
+    grade: "-",
+    itemKind: "TARGET"
+  });
   allTargets = (allTargets || []).filter(x =>
     !(x.monthYear === monthYear && x.block === block && String(x.clf || "ALL").toLowerCase() === String(clf || "ALL").toLowerCase() && x.cadreType === cadreType)
   );
+  mergeLocalDeleted_();
+  renderDeletedRecords();
   renderSavedTargetsTable();
   loadTargetFormKpis();
 
@@ -1317,6 +1465,7 @@ function buildDynamicKpiForm(existingData = null) {
   });
 
   recalculateTotals();
+  updateSubmitterBanner_(existingData);
 }
 
 
@@ -1753,18 +1902,65 @@ async function flushOfflineQueue() {
 // ==========================================================================
 // DMMU / ZILLA CEO / DEVELOPER EXCLUSIVE CONTROLS
 // ==========================================================================
+function recordLocalDeletedItem_(item) {
+  const key = "bihaan_surguja_local_deleted";
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { list = []; }
+  list.unshift({
+    deletedAt: new Date().toISOString(),
+    deletedBy: (currentUser && currentUser.userId) || "ADMIN",
+    deletedByRole: (currentUser && currentUser.role) || "DEVELOPER",
+    ...item
+  });
+  localStorage.setItem(key, JSON.stringify(list.slice(0, 200)));
+}
+
+function mergeLocalDeleted_() {
+  const key = "bihaan_surguja_local_deleted";
+  let localList = [];
+  try { localList = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { localList = []; }
+  const serverList = Array.isArray(allDeletedRecords) ? [...allDeletedRecords] : [];
+  const seen = new Set(serverList.map(x => `${x.reportId}|${x.deletedAt}`));
+  localList.forEach(loc => {
+    const k = `${loc.reportId}|${loc.deletedAt}`;
+    if (!seen.has(k)) {
+      seen.add(k);
+      serverList.unshift(loc);
+    }
+  });
+  allDeletedRecords = serverList;
+}
+
 async function deleteReport(reportId) {
   if (!currentUser.isAbsoluteAdmin) return;
-  if (!confirm("क्या आप वाकई इस प्रतिवेदन को स्थायी रूप से हटाना (Delete) चाहते हैं?")) return;
+  if (!confirm("Permanently delete this report?")) return;
+  const targetRep = allReports.find(r => r.reportId === reportId) || {};
+  recordLocalDeletedItem_({
+    reportId: reportId,
+    monthYear: targetRep.monthYear || "-",
+    cadreType: targetRep.cadreType || "-",
+    cadreName: targetRep.cadreName || "-",
+    block: targetRep.block || "-",
+    clf: targetRep.clf || "-",
+    totalScore: targetRep.totalScore !== undefined ? targetRep.totalScore : "-",
+    grade: targetRep.grade || "-",
+    itemKind: "REPORT"
+  });
+  allReports = allReports.filter(r => r.reportId !== reportId);
+  renderDashboard();
+  mergeLocalDeleted_();
+  renderDeletedRecords();
+
   try {
     const res = await apiRequest({ action: "deleteReport", reportId });
-    if (!res.ok) showAlert("globalAlert", res.error, "danger");
-    else {
-      showAlert("globalAlert", res.message, "success");
+    if (!res.ok) {
+      showAlert("globalAlert", (res.error || "Delete error") + " (Logged in Deleted Data tab)", "danger");
+    } else {
+      showAlert("globalAlert", res.message || "Report deleted and logged.", "success");
       await syncData();
     }
   } catch (err) {
-    showAlert("globalAlert", err.message, "danger");
+    showAlert("globalAlert", "Deleted & logged locally (" + err.message + ")", "success");
   }
 }
 
@@ -1858,10 +2054,13 @@ let allDeletedRecords = [];
 
 async function loadDeletedRecords() {
   if (!currentUser || !currentUser.isAbsoluteAdmin) return;
+  mergeLocalDeleted_();
+  renderDeletedRecords();
   try {
     const res = await apiRequest({ action: "getDeletedRecords" });
     if (!res.ok) return;
     allDeletedRecords = res.deleted || [];
+    mergeLocalDeleted_();
     renderDeletedRecords();
   } catch (e) {}
 }
@@ -2103,7 +2302,26 @@ const FULL_I18N = {
     logoutBtn: "Logout from Device",
     updateProfileBtn: "Update Profile & Password",
     updateApiBtn: "Update API URL",
-    openMasterSheetBtn: "Open Master Google Sheet"
+    openMasterSheetBtn: "Open Master Google Sheet",
+    installAppBtn: "📲 Install App",
+    quickPinBioBtn: "🔐 Quick Sign-In with PIN / Fingerprint",
+    lblThemeSelect: "Select App Theme (Default: Phone System Mode)",
+    optThemeSys: "📱 Default Phone Mode",
+    optThemeLight: "☀️ Light Mode",
+    optThemeDark: "🌙 Dark Mode",
+    optThemeHc: "👁️ High Contrast Mode",
+    lblNewPin: "Set / Edit 4-Digit Device PIN",
+    btnSavePin: "Save / Update PIN",
+    btnRegBio: "👆 Set / Update Fingerprint",
+    btnClearPin: "✕ Remove PIN",
+    lblSetUserId: "Login ID (Unchangeable)",
+    lblSetRole: "Category & Role",
+    lblSetJurisdiction: "Allocated Workspace (Block / CLF / VO)",
+    lblSetFullName: "Full Name",
+    lblSetMobile: "Mobile Number",
+    lblSetNewPass: "New Password (min 6 chars)",
+    phSetNewPass: "Leave blank to keep current",
+    addCustomKpiBtn: "+ Add Custom KPI Row"
   },
   hi: {
     brandTitle: "सीजीएसआरएलएम बिहान — जिला सरगुजा",
@@ -2170,7 +2388,26 @@ const FULL_I18N = {
     logoutBtn: "लॉगआउट करें",
     updateProfileBtn: "प्रोफ़ाइल व पासवर्ड अपडेट करें",
     updateApiBtn: "API URL अपडेट करें",
-    openMasterSheetBtn: "मास्टर Google Sheet खोलें"
+    openMasterSheetBtn: "मास्टर Google Sheet खोलें",
+    installAppBtn: "📲 ऐप इंस्टॉल करें",
+    quickPinBioBtn: "🔐 PIN / फिंगरप्रिंट से त्वरित लॉगिन",
+    lblThemeSelect: "ऐप थीम चुनें (डिफ़ॉल्ट: फ़ोन सिस्टम मोड)",
+    optThemeSys: "📱 डिफ़ॉल्ट फ़ोन मोड",
+    optThemeLight: "☀️ उजला मोड (Light)",
+    optThemeDark: "🌙 डार्क मोड (Dark)",
+    optThemeHc: "👁️ उच्च कंट्रास्ट मोड",
+    lblNewPin: "4-अंकों का नया PIN सेट / बदलें",
+    btnSavePin: "PIN सुरक्षित करें",
+    btnRegBio: "👆 फिंगरप्रिंट सेट / बदलें",
+    btnClearPin: "✕ PIN हटाएं",
+    lblSetUserId: "लॉगिन आईडी (अपरिवर्तनीय)",
+    lblSetRole: "श्रेणी एवं भूमिका",
+    lblSetJurisdiction: "आवंटित कार्यक्षेत्र (Block / CLF / VO)",
+    lblSetFullName: "पूरा नाम",
+    lblSetMobile: "मोबाइल नंबर",
+    lblSetNewPass: "नया पासवर्ड (कम से कम 6 अक्षर)",
+    phSetNewPass: "खाली छोड़ें यदि नहीं बदलना है",
+    addCustomKpiBtn: "+ नया KPI जोड़ें"
   }
 };
 
@@ -2179,6 +2416,10 @@ function translateDomElements() {
   document.querySelectorAll("[data-i18n]").forEach(el => {
     const key = el.getAttribute("data-i18n");
     if (dict[key]) el.textContent = dict[key];
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => {
+    const key = el.getAttribute("data-i18n-ph");
+    if (dict[key]) el.setAttribute("placeholder", dict[key]);
   });
 }
 

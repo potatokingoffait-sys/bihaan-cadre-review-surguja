@@ -502,3 +502,13 @@ th {
   body { background: #fff; color: #000; }
   .card { box-shadow: none; border: 1px solid #000; }
 }
+
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.9rem;
+  align-items: end;
+}
+.form-grid-3 .field {
+  margin-bottom: 0;
+}

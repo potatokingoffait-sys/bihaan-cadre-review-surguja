@@ -52,6 +52,9 @@
           <input id="loginPassInput" type="password" required autocomplete="current-password" placeholder="••••••••" />
         </div>
         <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn" data-i18n="signInBtn">Sign In</button>
+        <div id="loginQuickBioPinBox" style="margin-top:0.85rem; padding-top:0.75rem; border-top:1px dashed var(--border); display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="openQuickUnlockFromLogin()" data-i18n="quickPinBioBtn">🔐 Quick Sign-In with PIN / Fingerprint</button>
+        </div>
 
         <div style="margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--border); text-align: center; font-size: 0.78rem; color: var(--text-muted);">
           <span data-i18n="loginHint">Password required on new devices • Quick unlock with PIN or fingerprint after first sign-in</span>
@@ -218,6 +221,7 @@
         <button type="button" class="btn btn-outline btn-sm" id="langToggleBtn" onclick="toggleLanguage()">🌐 EN / हिं</button>
         <span class="role-pill" id="headerRoleBadge">ROLE</span>
         <button type="button" class="btn btn-outline btn-sm" id="syncBtn" onclick="syncData()">🔄 सिंक</button>
+        <button type="button" class="btn btn-outline btn-sm" id="installAppBtn" onclick="triggerPwaInstall()" data-i18n="installAppBtn">📲 Install App</button>
         <button type="button" class="btn btn-outline btn-sm" id="lockBtn" onclick="lockAppNow()">🔒 लॉक</button>
       </div>
     </header>
@@ -365,7 +369,7 @@
             <div class="form-grid">
               <div class="field" style="text-align: left;">
                 <label>माह व वर्ष</label>
-                <input id="dirMonth" type="month" required />
+                <input id="dirMonth" type="month" value="2026-11" min="2020-01" max="2099-12" required />
               </div>
               <div class="field" style="text-align: left;">
                 <label>संबंधित कैडर</label>
@@ -460,6 +464,13 @@
               </div>
             </div>
 
+            
+            <!-- Submitter / Cadre Identification Banner -->
+            <div id="reportSubmitterBanner" style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:0.75rem 1rem; margin-bottom:0.9rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem; font-size:0.84rem;">
+              <div><strong>👤 Cadre / Submitter:</strong> <span id="bannerCadreDetails">—</span></div>
+              <div><strong>📍 Area:</strong> <span id="bannerAreaDetails">—</span></div>
+            </div>
+
             <!-- Dynamic KPI Table -->
             <div class="table-wrap" style="margin: 1rem 0;">
               <table>
@@ -476,6 +487,9 @@
                 </thead>
                 <tbody id="dynamicKpiBody"></tbody>
               </table>
+              <div style="margin-top:0.6rem;">
+                <button type="button" class="btn btn-outline btn-sm" onclick="addCustomKpiRow()" data-i18n="addCustomKpiBtn">+ Add Custom KPI Row</button>
+              </div>
             </div>
 
             <!-- Section E: Numerical Summary for District Consolidation -->
@@ -594,6 +608,7 @@
                   <th>CLF</th>
                   <th>Cadre</th>
                   <th>Set By</th>
+                  <th>Approval Status</th>
                   <th>Updated</th>
                   <th>Action</th>
                 </tr>
@@ -691,12 +706,12 @@
               <div class="card-title" data-i18n="setThemeTitle">🎨 Appearance & Theme Settings</div>
             </div>
             <div class="field" style="text-align: left;">
-              <label for="themeSelect">ऐप थीम चुनें (Default: फ़ोन सिस्टम मोड)</label>
+              <label for="themeSelect" data-i18n="lblThemeSelect">Select App Theme (Default: Phone System Mode)</label>
               <select id="themeSelect" onchange="applyTheme(this.value)">
-                <option value="system">📱 Default Phone Mode (फ़ोन के अनुसार स्वतः)</option>
-                <option value="light">☀️ Light Mode (उजला मोड)</option>
-                <option value="dark">🌙 Dark Mode (डार्क मोड)</option>
-                <option value="high-contrast">👁️ High Contrast Mode (उच्च कंट्रास्ट)</option>
+                <option value="system" data-i18n="optThemeSys">📱 Default Phone Mode</option>
+                <option value="light" data-i18n="optThemeLight">☀️ Light Mode</option>
+                <option value="dark" data-i18n="optThemeDark">🌙 Dark Mode</option>
+                <option value="high-contrast" data-i18n="optThemeHc">👁️ High Contrast Mode</option>
               </select>
             </div>
             <p style="font-size: 0.8rem; color: var(--text-muted);">
@@ -710,12 +725,13 @@
               <div class="card-title" data-i18n="setPinTitle">🔐 Fingerprint & PIN Device Lock</div>
             </div>
             <div class="field" style="text-align: left;">
-              <label for="newPinInput">4-अंकों का नया PIN सेट / बदलें</label>
+              <label for="newPinInput" data-i18n="lblNewPin">Set / Edit 4-Digit Device PIN</label>
               <input id="newPinInput" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="4 अंक दर्ज करें (जैसे: 2580)" />
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button type="button" class="btn btn-primary btn-sm" onclick="saveDevicePin()">PIN सुरक्षित करें</button>
-              <button type="button" class="btn btn-outline btn-sm" onclick="registerDeviceBiometric()">👆 फिंगरप्रिंट / बायोमेट्रिक जोड़ें</button>
+              <button type="button" class="btn btn-primary btn-sm" data-i18n="btnSavePin" onclick="saveDevicePin()">Save / Update PIN</button>
+              <button type="button" class="btn btn-outline btn-sm" data-i18n="btnRegBio" onclick="registerDeviceBiometric()">👆 Set / Update Fingerprint</button>
+              <button type="button" class="btn btn-danger btn-sm" data-i18n="btnClearPin" onclick="clearDevicePin()">✕ Remove PIN</button>
             </div>
             <p id="biometricStatusText" style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.65rem;"></p>
           </div>
@@ -728,30 +744,30 @@
             <button type="button" class="btn btn-danger btn-sm" data-i18n="logoutBtn" onclick="logoutUser()">Logout from Device</button>
           </div>
           <form onsubmit="updateAccountSettings(event)">
-            <div class="form-grid">
+            <div class="form-grid-3">
               <div class="field" style="text-align: left;">
-                <label>लॉगिन आईडी (Login ID - अपरिवर्तनीय)</label>
+                <label data-i18n="lblSetUserId">Login ID (Unchangeable)</label>
                 <input id="setUserId" type="text" readonly />
               </div>
               <div class="field" style="text-align: left;">
-                <label>श्रेणी एवं भूमिका (Category & Role)</label>
+                <label data-i18n="lblSetRole">Category & Role</label>
                 <input id="setRoleInfo" type="text" readonly />
               </div>
               <div class="field" style="text-align: left;">
-                <label>आवंटित कार्यक्षेत्र (Block / CLF / VO)</label>
+                <label data-i18n="lblSetJurisdiction">Allocated Workspace (Block / CLF / VO)</label>
                 <input id="setJurisdiction" type="text" readonly />
               </div>
               <div class="field" style="text-align: left;">
-                <label for="setFullName">पूरा नाम (Full Name)</label>
+                <label for="setFullName" data-i18n="lblSetFullName">Full Name</label>
                 <input id="setFullName" type="text" required />
               </div>
               <div class="field" style="text-align: left;">
-                <label for="setMobile">मोबाइल नंबर</label>
+                <label for="setMobile" data-i18n="lblSetMobile">Mobile Number</label>
                 <input id="setMobile" type="tel" />
               </div>
               <div class="field" style="text-align: left;">
-                <label for="setNewPassword">नया पासवर्ड (बदलने के लिए भरें, कम से कम 6 अक्षर)</label>
-                <input id="setNewPassword" type="password" minlength="6" placeholder="खाली छोड़ें यदि नहीं बदलना है" />
+                <label for="setNewPassword" data-i18n="lblSetNewPass">New Password (min 6 chars)</label>
+                <input id="setNewPassword" type="password" minlength="6" placeholder="Leave blank to keep current" data-i18n-ph="phSetNewPass" />
               </div>
             </div>
             <button type="submit" class="btn btn-primary" data-i18n="updateProfileBtn">Update Profile & Password</button>
