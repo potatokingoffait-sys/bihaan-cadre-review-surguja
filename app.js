@@ -616,6 +616,7 @@ async function syncData() {
     allReports = data.reports || [];
     allUsers = data.users || [];
     allTargets = data.targets || [];
+    mergeLocalTargets_();
     gsheetMasterUrl = data.gsheetUrl || "";
 
     // Only DMMU, Zilla CEO, and Developer get direct Google Sheet URL
@@ -736,6 +737,51 @@ function loadTargetFormKpis() {
   });
 }
 
+function saveLocalTargetRule_(rule) {
+  const key = "bihaan_surguja_local_targets";
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { list = []; }
+  const idx = list.findIndex(x =>
+    x.monthYear === rule.monthYear &&
+    x.block === rule.block &&
+    String(x.clf || "ALL").toLowerCase() === String(rule.clf || "ALL").toLowerCase() &&
+    x.cadreType === rule.cadreType
+  );
+  const entry = {
+    ...rule,
+    setBy: (currentUser && currentUser.userId) || "ADMIN",
+    updatedAt: new Date().toISOString()
+  };
+  if (idx >= 0) list[idx] = entry;
+  else list.push(entry);
+  localStorage.setItem(key, JSON.stringify(list));
+  return list;
+}
+
+function mergeLocalTargets_() {
+  const key = "bihaan_surguja_local_targets";
+  let localList = [];
+  try { localList = JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { localList = []; }
+  if (!localList.length) return;
+  const merged = Array.isArray(allTargets) ? [...allTargets] : [];
+  localList.forEach(loc => {
+    const idx = merged.findIndex(x =>
+      x.monthYear === loc.monthYear &&
+      x.block === loc.block &&
+      String(x.clf || "ALL").toLowerCase() === String(loc.clf || "ALL").toLowerCase() &&
+      x.cadreType === loc.cadreType
+    );
+    if (idx >= 0) {
+      if (new Date(loc.updatedAt || 0) >= new Date(merged[idx].updatedAt || 0)) {
+        merged[idx] = loc;
+      }
+    } else {
+      merged.push(loc);
+    }
+  });
+  allTargets = merged;
+}
+
 async function saveCadreTargets(e) {
   e.preventDefault();
   if (!currentUser || !currentUser.isAbsoluteAdmin) return;
@@ -751,20 +797,25 @@ async function saveCadreTargets(e) {
     if (val !== "") kpiTargets[id] = val;
   });
 
+  const rule = { monthYear, block, clf, cadreType, kpiTargets };
+  saveLocalTargetRule_(rule);
+  mergeLocalTargets_();
+  renderSavedTargetsTable();
+
   try {
     const res = await apiRequest({
       action: "saveCadreTargets",
-      targetRule: { monthYear, block, clf, cadreType, kpiTargets }
+      targetRule: rule
     });
     if (!res.ok) {
-      showAlert("globalAlert", res.error, "danger");
+      showAlert("globalAlert", (res.error || "Backend error") + " (Saved locally in browser)", "danger");
     } else {
       showAlert("globalAlert", res.message || "Fixed targets saved successfully.", "success");
       await syncData();
       loadTargetFormKpis();
     }
   } catch (err) {
-    showAlert("globalAlert", err.message, "danger");
+    showAlert("globalAlert", "Saved locally in browser (" + err.message + ")", "success");
   }
 }
 
@@ -2023,12 +2074,16 @@ function applyLanguageUI() {
   setTxt("clearFilterBtn", t.clearFilter);
   setTxt("printPdfBtn", t.printPdf);
 
-  const navBtns = document.querySelectorAll("#mainNavTabs .nav-btn");
-  if (navBtns[0]) navBtns[0].textContent = t.navDashboard;
-  if (navBtns[1]) navBtns[1].textContent = t.navEntry;
-  if (navBtns[2]) navBtns[2].textContent = t.navAdmin;
-  if (navBtns[3]) navBtns[3].textContent = currentLang === "en" ? "🗑️ Deleted Data" : "🗑️ हटाया गया डेटा";
-  if (navBtns[4]) navBtns[4].textContent = t.navSettings;
+  const setTabLabel = (tabName, text) => {
+    const btn = document.querySelector(`#mainNavTabs .nav-btn[data-tab="${tabName}"]`);
+    if (btn) btn.textContent = text;
+  };
+  setTabLabel("tabDashboard", t.navDashboard);
+  setTabLabel("tabEntry", t.navEntry);
+  setTabLabel("tabTargets", currentLang === "en" ? "🎯 Set Targets" : "🎯 लक्ष्य तय करें");
+  setTabLabel("tabAdmin", t.navAdmin);
+  setTabLabel("tabDeleted", currentLang === "en" ? "🗑️ Deleted Data" : "🗑️ हटाया गया डेटा");
+  setTabLabel("tabSettings", t.navSettings);
 
   const statLabels = document.querySelectorAll("#tabDashboard .stat-label");
   if (statLabels[0]) statLabels[0].textContent = t.statTotal;

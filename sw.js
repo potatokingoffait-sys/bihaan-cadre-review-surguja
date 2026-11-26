@@ -1,4 +1,4 @@
-// CGSRLM Bihaan Surguja v23 - Always fetch fresh HTML/JS/CSS
+// CGSRLM Bihaan Surguja v24 - Always fetch fresh HTML/JS/CSS
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", event => {
   event.waitUntil(
